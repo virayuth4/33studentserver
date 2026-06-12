@@ -9,5 +9,5 @@ jobs:
       - name: Build and push the image
         run: |
           docker login --username virayuth4 --password ${{secrets.GH_PAT_SERVER}} ghcr.io
-          docker build . --tag ghcr.io/virayuth4/zingowebservernode3:latest
-          docker push ghcr.io/virayuth4/zingowebservernode3:latest
+          docker build . --tag ghcr.io/virayuth4/33studentserver:latest
+          docker push ghcr.io/virayuth4/33studentserver:latest
