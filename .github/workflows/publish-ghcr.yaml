@@ -8,6 +8,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and push the image
         run: |
-          docker login --username virayuth4 --password ${{secrets.GH_PAT_SERVER}} ghcr.io
+          docker login --username virayuth4 --password ${{secrets.GH_PAT}} ghcr.io
           docker build . --tag ghcr.io/virayuth4/33studentserver:latest
           docker push ghcr.io/virayuth4/33studentserver:latest
