@@ -34,7 +34,7 @@ const getEffectivePrice = (variant) => {
 // ---- Telegram notification (kept mostly same, trimmed for brevity) ----
 async function sendTelegramOrderDetailsToId(
   chatId, orderId, orderDetails, shippingInfo, deliveryFee,
-  paymentMethod, pointsUsed, pointsDiscount, firstOrderDiscount,
+  paymentMethod, deliveryMethod, pointsUsed, pointsDiscount, firstOrderDiscount,
   discountCode, codeDiscount, userFullName, userPhoneNumber
 ) {
   const botToken = process.env.TELEGRAM_ORDERS_BOT_TOKEN?.trim();
@@ -82,6 +82,7 @@ async function sendTelegramOrderDetailsToId(
     (userPhoneNumber ? `└ Merchant Phone Number: ${userPhoneNumber}\n` : `└ No account linked\n`) +
     `\n📍 *DELIVERY*\n` +
     `├ Address: ${address}\n` +
+    `├ Delivery Method: ${deliveryMethod === 'pickup' ? 'Store Pickup' : deliveryMethod === 'grabExpress' ? 'Grab Express' : 'Normal'}\n` +
     `└ Payment: ${paymentLabel}\n` +
     `\n🛒 *ORDER ITEMS*\n${itemLines}\n` +
     `\n💰 *PRICE BREAKDOWN*\n` +
@@ -249,19 +250,23 @@ async function calculateTotalFromDatabase(products, deliveryFee, pointsDiscount,
     subtotal += actualPrice * product.purchasedQuantity;
   }
 
+  const fee = Number(deliveryFee) || 0;
+  const points = Number(pointsDiscount) || 0;
+  const firstOrder = Number(firstOrderDiscount) || 0;
+  const code = Number(codeDiscount) || 0;
+
   return {
     subtotal,
-    totalAmount: subtotal + deliveryFee - pointsDiscount - firstOrderDiscount - codeDiscount
+    totalAmount: subtotal + fee - points - firstOrder - code
   };
 }
-
 // ---- Create order ----
 async function createOrderWithAvailabilityCheck(orderData, client) {
-  const {
-    products, shippingInfo, deliveryFee, paymentMethod,
-    pointsUsed, pointsDiscount, userId, firstOrderDiscount,
-    discountCode, codeDiscount
-  } = orderData;
+const {
+  products, shippingInfo, deliveryFee, paymentMethod,
+  pointsUsed, pointsDiscount, userId, firstOrderDiscount,
+  discountCode, codeDiscount, deliveryMethod
+} = orderData;
 
   // Validate discount code if provided
   if (discountCode) {
@@ -350,9 +355,9 @@ async function createOrderWithAvailabilityCheck(orderData, client) {
       "orderId", "userId", "totalAmount", "originalTotalAmount",
       "pointsUsed", "shippingInfo", "statusHistories", "currentStatus",
       "discountCode", "codeDiscount", "paymentMethod", "paymentStatus", "deliveryFee",
-      "createdAt", "updatedAt"
+      "deliveryMethod", "createdAt", "updatedAt"
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING "orderId"
   `;
 
@@ -363,22 +368,23 @@ async function createOrderWithAvailabilityCheck(orderData, client) {
   }];
 
   const orderResult = await client.query(orderInsertQuery, [
-    customOrderId,
-    userId || null,
-    totalAmount,
-    subtotal,
-    pointsUsed,
-    JSON.stringify(shippingInfo),
-    JSON.stringify(initialStatus),
-    'ordered',
-    discountCode || null,
-    codeDiscount || 0,
-    paymentMethod || "cod",
-    'pending',
-    deliveryFee || 1.0,
-    new Date().toISOString(),
-    new Date().toISOString()
-  ]);
+  customOrderId,
+  userId || null,
+  totalAmount,
+  subtotal,
+  pointsUsed,
+  JSON.stringify(shippingInfo),
+  JSON.stringify(initialStatus),
+  'ordered',
+  discountCode || null,
+  codeDiscount || 0,
+  paymentMethod || "cod",
+  'pending',
+  deliveryFee || 1.0,
+  deliveryMethod || 'normal',
+  new Date().toISOString(),
+  new Date().toISOString()
+]);
 
   const orderId = orderResult.rows[0].orderId;
 
@@ -476,29 +482,29 @@ router.post("/33/order/create", authenticateFirebaseToken,
       await client.query("BEGIN");
 
       try {
-        let orderDetails, shippingInfo, paymentMethod, pointsUsed, pointsDiscount,
-          firstOrderDiscount, discountCode, codeDiscount;
+       let orderDetails, shippingInfo, paymentMethod, deliveryMethod, pointsUsed, pointsDiscount,
+        firstOrderDiscount, discountCode, codeDiscount;
 
-        if (req.body.orderData) {
-          const parsedOrderData = JSON.parse(req.body.orderData);
-          orderDetails       = parsedOrderData.orderDetails;
-          shippingInfo       = parsedOrderData.shippingInfo;
-          paymentMethod      = parsedOrderData.paymentMethod;
-          pointsUsed         = parsedOrderData.pointsUsed;
-          pointsDiscount     = parsedOrderData.pointsDiscount;
-          firstOrderDiscount = parsedOrderData.firstOrderDiscount || 0;
-          discountCode       = parsedOrderData.discountCode || null;
-          codeDiscount       = parsedOrderData.codeDiscount || 0;
-        } else {
-          orderDetails       = req.body.orderDetails;
-          shippingInfo       = req.body.shippingInfo;
-          paymentMethod      = req.body.paymentMethod;
-          pointsUsed         = req.body.pointsUsed;
-          pointsDiscount     = req.body.pointsDiscount;
-          firstOrderDiscount = req.body.firstOrderDiscount || 0;
-          discountCode       = req.body.discountCode || null;
-          codeDiscount       = req.body.codeDiscount || 0;
-        }
+        pointsUsed = 0;
+        pointsDiscount = 0;
+        firstOrderDiscount = 0;
+
+    if (req.body.orderData) {
+      const parsed = JSON.parse(req.body.orderData);
+      orderDetails   = parsed.orderDetails;
+      shippingInfo   = parsed.shippingInfo;
+      paymentMethod  = parsed.paymentMethod;
+      deliveryMethod = parsed.deliveryMethod || 'normal';
+      discountCode   = parsed.discountCode || null;
+      codeDiscount   = parsed.codeDiscount || 0;
+    } else {
+      orderDetails   = req.body.orderDetails;
+      shippingInfo   = req.body.shippingInfo;
+      paymentMethod  = req.body.paymentMethod;
+      deliveryMethod = req.body.deliveryMethod || 'normal';
+      discountCode   = req.body.discountCode || null;
+      codeDiscount   = req.body.codeDiscount || 0;
+    }
 
         if (!orderDetails || !orderDetails.products || !Array.isArray(orderDetails.products)) {
           return res.status(400).json({
@@ -523,29 +529,31 @@ router.post("/33/order/create", authenticateFirebaseToken,
         const postedByMap = Object.fromEntries(productRows.map(r => [r.id, r.postedBy]));
         console.log("postedByMap from DB:", postedByMap);
 
-        const deliveryFee = getDeliveryFee(paymentMethod);
+        const deliveryFee = getDeliveryFee(paymentMethod, deliveryMethod);
 
-        const orderData = {
-          products: orderDetails.products,
-          shippingInfo,
-          deliveryFee,
-          paymentMethod,
-          pointsUsed,
-          pointsDiscount,
-          userId: req.user?.uid || req.user?.user_id || null,
-          paymentReceiptFile: req.file || null,
-          firstOrderDiscount: firstOrderDiscount || 0,
-          discountCode: discountCode || null,
-          codeDiscount: codeDiscount || 0,
-        };
+
+     const orderData = {
+        products: orderDetails.products,
+        shippingInfo,
+        deliveryFee,
+        deliveryMethod,
+        paymentMethod,
+        pointsUsed,
+        pointsDiscount,
+        userId: req.user?.uid || req.user?.user_id || null,
+        paymentReceiptFile: req.file || null,
+        firstOrderDiscount: firstOrderDiscount || 0,
+        discountCode: discountCode || null,
+        codeDiscount: codeDiscount || 0,
+      };
 
         const result = await createOrderWithAvailabilityCheck(orderData, client);
 
         const adminTelegramId = process.env.TELEGRAM_DEFAULT_CHAT_ID ?? 131693106;
 
-        const notificationArgs = [
+     const notificationArgs = [
           result.orderId, { ...orderDetails, products: result.enrichedProducts }, shippingInfo, deliveryFee,
-          paymentMethod, pointsUsed, pointsDiscount, firstOrderDiscount,
+          paymentMethod, deliveryMethod, 0, 0, 0,
           discountCode, codeDiscount,
         ];
 
