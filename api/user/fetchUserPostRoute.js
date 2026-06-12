@@ -18,7 +18,7 @@ router.get('/user/:userId/posts', createRateLimiterMiddleware, async (req, res) 
         const userQuery = `
             SELECT 
                 json_build_object(
-                    'uid', users.firebase_uid,
+                    'uid', users.userId,
                     'name', users.name,
                     'email', users.email,
                     'picture', users.picture,
@@ -41,10 +41,10 @@ router.get('/user/:userId/posts', createRateLimiterMiddleware, async (req, res) 
                     )
                 ) FILTER (WHERE products.id IS NOT NULL) as products
             FROM users 
-            -- 🔥 CRITICAL FIX: Match the product owner to the firebase_uid column
-            LEFT JOIN products ON users.firebase_uid = products."postedBy"
-            WHERE users.firebase_uid = $1
-            GROUP BY users.firebase_uid
+            -- 🔥 CRITICAL FIX: Match the product owner to the userId column
+            LEFT JOIN products ON users.userId = products."postedBy"
+            WHERE users.userId = $1
+            GROUP BY users.userId
         `;
         
         const result = await zingoPool.query(userQuery, [userId]);

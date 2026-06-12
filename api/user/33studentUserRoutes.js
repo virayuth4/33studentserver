@@ -47,11 +47,11 @@ router.post("/user/google-login", async (req, res) => {
   }
     // 4. Upsert directly into PostgreSQL with the dynamically resolved school name!
     const upsertQuery = `
-      INSERT INTO "33studentusers" (firebase_uid, name, email, picture, school)
+      INSERT INTO "33studentusers" (userId, name, email, picture, school)
       VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (firebase_uid) 
+      ON CONFLICT (userId) 
       DO UPDATE SET name = EXCLUDED.name, picture = EXCLUDED.picture
-      RETURNING firebase_uid, name, email, picture, phone, address, school;
+      RETURNING userId, name, email, picture, phone, address, school;
     `;
 
     const values = [uid, name, email, picture, assignedSchoolName];
@@ -84,7 +84,7 @@ router.put("/user/update-profile", async (req, res) => {
     const updateQuery = `
       UPDATE users 
       SET phone = $1, address = $2, school = $3
-      WHERE firebase_uid = $4
+      WHERE userId = $4
       RETURNING *;
     `;
     

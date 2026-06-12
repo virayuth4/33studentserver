@@ -46,8 +46,8 @@ router.post('/33student/product/posting',
       }
 
       try {
-        console.log("===== 1464 Product Posting reached");
-        const userId = req.user?.id || req.user?.userId;
+        console.log("===== 1 Product Posting reached");
+        const userId = req.user?.uid || req.user?.user_id;
         
         console.log("Text data:", req.body);
         console.log("req.user:", req.user);
@@ -198,7 +198,7 @@ if (variants) {
           paymentMethods,
           countryOfOrigin,
           sizingGuide,
-          productGender,
+          gender,
           sizingMeasurements
         ];
 
@@ -251,11 +251,11 @@ router.post('/33products/product/editing/:productId',
         return res.status(400).json({ error: err.message });
       }
 
-        console.log("===== 1464 Editing Route Hit =====");
+        console.log("===== 33 Editing Route Hit =====");
         console.log("User Id:", req.user.id);
         console.log("Text data:", req.body);
         console.log("Product Id", req.params)
-        const userId = req.user.id;
+        const userId = req.user?.uid || req.user?.user_id;
         console.log("userId", userId);
         const {productId} = req.params
         console.log("productId", productId, typeof(productId))
@@ -308,10 +308,10 @@ router.post('/33products/product/editing/:productId',
       const _productTags = [productTags]
       console.log("_productTags", _productTags)
 
-   let productPrice = 1; // Default fallback
-let availableQuantity = 1; // Default fallback
-let processedVariants = null;
-let productGender = gender || 'men';
+    let productPrice = 1; // Default fallback
+    let availableQuantity = 1; // Default fallback
+    let processedVariants = null;
+    let productGender = gender || 'men';
 
 let discountedPrice = null;
 let discountPercentage = null;

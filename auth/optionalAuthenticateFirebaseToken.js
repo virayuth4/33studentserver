@@ -14,7 +14,7 @@ const optionalAuthenticateFirebaseToken = async (req, res, next) => {
     
     // Look up your DB user record the same way authenticateFirebaseToken does
     const result = await zingoPool.query(
-      'SELECT * FROM users WHERE firebase_uid = $1',
+      'SELECT * FROM users WHERE userId = $1',
       [decodedToken.uid]
     )
     req.user = result.rows[0] || null

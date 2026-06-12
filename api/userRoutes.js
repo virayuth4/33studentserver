@@ -147,7 +147,7 @@ router.get('/user/profile', authenticateFirebaseToken, async (req, res) => {
                  json_agg(
                    json_build_object(
                      'id', addr.id,
-                     'studentUid', addr.student_uid,
+                     'studentUid', addr."studentId",
                      'address', addr.address,
                      'city', addr.city,
                      'phoneNumber', addr."phoneNumber",
@@ -161,9 +161,9 @@ router.get('/user/profile', authenticateFirebaseToken, async (req, res) => {
                  '[]'::json
                ) AS addresses
         FROM "33studentusers"
-        LEFT JOIN "33studentusersaddress" addr ON "33studentusers".firebase_uid = addr.student_uid
-        WHERE "33studentusers"."firebase_uid" = $1
-        GROUP BY "33studentusers"."firebase_uid"
+        LEFT JOIN "33studentusersaddress" addr ON "33studentusers"."userId" = addr."studentId"
+        WHERE "33studentusers"."userId" = $1
+        GROUP BY "33studentusers"."userId"
         `;
 
         const result = await zingoPool.query(query, [firebaseUid]);

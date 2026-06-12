@@ -12,11 +12,11 @@ const { sanitizeFileName } = require("../../utils/sanitzieFileName");
 const path = require('path');
 const fs = require('fs');
 
-
-router.post('/1464/cart/add', authenticateFirebaseToken, async(req, res) => {
+router.post('/cart/add', authenticateFirebaseToken, async(req, res) => {
+    console.log('=====33 add to cart route hit=====')
     const logPrefix = '[Cart/Add]';
-    const userId = req.user.id;
-    const { productId, purchasedQuantity, selectedColor, selectedSize } = req.body;
+     const userId = req.user?.uid || req.user?.user_id;
+    const { productId, purchasedQuantity = 1, variantId, selectedColor, selectedSize, variantPrice, action } = req.body;
 
     console.log(`${logPrefix} Request body:`, req.body);
     console.log(`${logPrefix} userId: ${userId}`);
@@ -27,34 +27,32 @@ router.post('/1464/cart/add', authenticateFirebaseToken, async(req, res) => {
 
         // Check if the cart exists for the user
         const cartResult = await client.query(`
-            SELECT id FROM "1464_carts" WHERE "userId" = $1
+            SELECT id FROM "33carts" WHERE "userId" = $1
         `, [userId]);
 
         let cartId;
         if (cartResult.rows.length === 0) {
-            // Create a new cart if it doesn't exist
             const newCartResult = await client.query(`
-                INSERT INTO "1464_carts" ("userId") VALUES ($1) RETURNING id
+                INSERT INTO "33carts" ("userId") VALUES ($1) RETURNING id
             `, [userId]);
             cartId = newCartResult.rows[0].id;
         } else {
             cartId = cartResult.rows[0].id;
         }
 
-        // Insert the item into cart_items with conflict resolution
+        // Insert the item into 33cartItems
         const result = await client.query(`
-            INSERT INTO "1464_cart_items" ("cartId", "productId", "purchasedQuantity", "selectedColor", "selectedSize")
+            INSERT INTO "33cartItems" ("cartId", "productId", "purchasedQuantity", "selectedColor", "selectedSize")
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT ("cartId", "productId", "selectedColor", "selectedSize")
-            DO UPDATE SET 
-                "purchasedQuantity" = "1464_cart_items"."purchasedQuantity" + EXCLUDED."purchasedQuantity",
+            ON CONFLICT ("cartId", "productId", "selectedColor", "selectedSize") DO UPDATE
+            SET "purchasedQuantity" = "33cartItems"."purchasedQuantity" + EXCLUDED."purchasedQuantity",
                 "updatedAt" = CURRENT_TIMESTAMP
-        `, [cartId, productId, purchasedQuantity, selectedColor, selectedSize]);
+        `, [cartId, productId, purchasedQuantity, selectedColor || null, selectedSize || null]);
 
-        console.log(`${logPrefix} Insert/Update result:`, result);
+        console.log(`${logPrefix} Insert/Update result:`, result.rowCount);
 
         await client.query('COMMIT');
-        res.status(200).json({ message: "Item added to cart successfully"});
+        res.status(200).json({ message: "Item added to cart successfully" });
     } catch (error) {
         await client.query('ROLLBACK');
         console.error(`${logPrefix} Error:`, error);
@@ -64,15 +62,14 @@ router.post('/1464/cart/add', authenticateFirebaseToken, async(req, res) => {
     }
 });
 
-
-router.post('/1464/cart/remove', authenticateFirebaseToken, async (req,res) => {
+router.post('/33/cart/remove', authenticateFirebaseToken, async (req,res) => {
     /**
     * This route requires productId and cartId. 
     */
-    
+    const userId = req.user?.uid || req.user?.user_id;
     console.log('deleting item from cart route hit');
     console.log('req body of deleting', req.body)
-    console.log("userId", req.user.id)
+    console.log("userId", userId)
 
     const {cartItemsId} = req.body
     // console.log(`productId:${cartId}, type: ${(typeof(cartId))}`)
@@ -89,7 +86,7 @@ router.post('/1464/cart/remove', authenticateFirebaseToken, async (req,res) => {
         await client.query('BEGIN')
         // deletion 
         const deleteQuery = `
-            DELETE FROM "1464_cart_items"
+            DELETE FROM "33cartItems"
             WHERE "id" = $1
         `
         const result = await client.query(deleteQuery, [cartItemsId]);
@@ -103,7 +100,7 @@ router.post('/1464/cart/remove', authenticateFirebaseToken, async (req,res) => {
           }
 
         const getCartItemsQuery = `
-          SELECT * FROM "1464_cart_items"
+          SELECT * FROM "33cartItems"
           WHERE "cartId" = $1
         `;
         const updatedCartItems = await client.query(getCartItemsQuery, [cartItemsId]);
@@ -122,15 +119,16 @@ router.post('/1464/cart/remove', authenticateFirebaseToken, async (req,res) => {
     }
 }) 
 
-router.get('/1464/cart', authenticateFirebaseToken, async(req,res) => {
-    console.log('=====1464 get cart route hit=====')
-    console.log('most likely for checkout page')
-    // console.log('user id', req.user.id)
+router.get('/cart/get', authenticateFirebaseToken, async(req,res) => {
+    console.log('=====33student get cart route hit=====')
+    const userId = req.user?.uid || req.user?.user_id;
+
+    console.log('user id', userId)
     // console.log('user id from params', req.params)
     let client;
     try {
         client = await zingoPool.connect()
-        const userId = req.user.id;
+
 
         const cartItems = await client.query(
             `
@@ -145,14 +143,14 @@ router.get('/1464/cart', authenticateFirebaseToken, async(req,res) => {
                 p."productPrice",
                 p."discountedPrice",
                 p."isSold",
-                p."soldAt",
+           
                 ci."purchasedQuantity",
                 p."slug",
                 p."productImagePaths"[0] as "productImage"
 
-            FROM "1464_carts" c
-            JOIN "1464_cart_items" ci ON c.id = ci."cartId"
-            JOIN "1464_products" p ON ci."productId" = p.id
+            FROM "33carts" c
+            JOIN "33cartItems" ci ON c.id = ci."cartId"
+            JOIN "33products" p ON ci."productId" = p.id
             WHERE c."userId" = $1
             ORDER BY ci."createdAt" DESC
             `,
@@ -177,13 +175,13 @@ router.get('/1464/cart', authenticateFirebaseToken, async(req,res) => {
     }
 })
 
-router.post('/1464/cart/clear' , authenticateFirebaseToken, async(req,res) => {
+router.post('/33/cart/clear' , authenticateFirebaseToken, async(req,res) => {
     console.log('1464/cart/clear route hit')
-    const userId = req.user.id
+    const userId = req.user?.uid || req.user?.user_id;
     console.log('userId', userId, typeof(userId))
     try {
         const query = `
-            DELETE FROM "1464_carts"
+            DELETE FROM "33carts"
             WHERE "userId" = $1
         `
         const deleteCartResult = await zingoPool.query(query, [userId])

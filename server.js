@@ -38,7 +38,6 @@ const userRoutes = require('./api/userRoutes')
 const testRoutes = require('./api/testRoutes')
 const productRoutes = require('./api/productRoutes')
 const userPostRoutes = require('./api/userPostRoutes')
-const addToCartRoutes = require('./api/addToCartRoutes')
 const orderRoutes = require('./api/orderRoutes')
 const commentsAndRatingsRoutes = require('./api/commentsAndRatingsRoutes')
 const slugRoutes = require('./api/slugRoutes')
@@ -49,6 +48,8 @@ const careerRoutes = require('./api/career/careerRoutes');
 //Import routes for 33 students ======
 const studentUserRoutes = require('./api/user/33studentUserRoutes');
 const studentProductRoutes = require('./api/products/33productRoute');
+const studentCartRoutes = require('./api/cart/cartRoutes');
+const studentDealsRoutes = require('./api/deals/dealsRoutes');
 
 //====================Import Routes for Flutter====================
 const flutterUserRoutes = require('./api/flutter/user/flutterUserRoutes');
@@ -71,7 +72,6 @@ const userSessionsRoutes = require('./api/sessions/sessionsRoutes');
 //===============================================================Import ROutes for Vintage
 const vintageFetchProductRoute = require('./api/vintage/vintageFetchProductRoute')
 const _1464EventTrackerRoutes = require ('./api/vintage/1464EventTrackerRoutes')
-const _1464AddToCartRoutes = require ('./api/vintage/1464AddToCartRoutes')
 const _1464CheckoutRoutes = require('./api/vintage/1464CheckoutRoutes')
 const _1464OrderRoutes = require('./api/vintage/1464OrderRoutes')
 const _1464AdminOrderRoutes = require('./api/vintage/1464AdminOrderRoutes')
@@ -173,7 +173,6 @@ app.use('/api', userRoutes)
 app.use('/api', testRoutes)
 app.use('/api', productRoutes)
 app.use('/api', userPostRoutes)
-app.use('/api', addToCartRoutes)
 app.use('/api', orderRoutes)
 app.use('/api', commentsAndRatingsRoutes)
 
@@ -187,7 +186,6 @@ app.use('/api', userSessionsRoutes);
 //===================Vintage Products Route========================
 app.use('/api', vintageFetchProductRoute) //this is also 1464
 app.use('/api', _1464EventTrackerRoutes)
-app.use('/api', _1464AddToCartRoutes)
 app.use('/api', _1464CheckoutRoutes)
 app.use('/api', _1464OrderRoutes)
 app.use('/api', _1464AdminOrderRoutes)
@@ -199,6 +197,8 @@ app.use('/api', vmallProductRoutes)
 //=================33 students route ============
 app.use('/api', studentUserRoutes)
 app.use('/api', studentProductRoutes)
+app.use('/api', studentCartRoutes)
+app.use('/api', studentDealsRoutes)
 
 app.use('/product', slugRoutes) //Slug route uses '/prducts' instead of '/api'
 

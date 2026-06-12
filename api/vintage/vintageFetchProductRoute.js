@@ -379,10 +379,10 @@ router.get('/1464/my-products', createRateLimiterMiddleware, async (req, res) =>
                 p."saleState", p."isReviewed", p."isVerified", p."isFeatured", p.slug, p."isSold", 
                 p."postedBy",  p."createdAt", p."discountedPrice", p."moneyBackGuarantee", p."productVariants", p."productSizingGuide", p.gender,
                 p."productSizingMeasurements",
-                u."firebase_uid" as "userId"
+                u."userId" as "userId"
              
          FROM "33products" p
-         LEFT JOIN "33studentusers" u ON p."postedBy" = u."firebase_uid"
+         LEFT JOIN "33studentusers" u ON p."postedBy" = u."userId"
          WHERE p.slug = $1`,
         [fullSlug]
       );
