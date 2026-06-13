@@ -196,7 +196,7 @@ router.get('/1464/orders', authenticateFirebaseToken, async (req, res) => {
 
 router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => {
     console.log('==========33 orderId route hit==========')
-    const userId = req.user.id
+    const userId = req.user.uid
     console.log("req query", req.query)
     console.log("req params", req.params)
     const page = parseInt(req.query.page) || 1

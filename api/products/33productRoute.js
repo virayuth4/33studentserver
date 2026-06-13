@@ -146,8 +146,8 @@ if (variants) {
         console.log(`Received ${imageFiles.length} images and ${videoFiles.length} videos`);
         
      
-        const imageUrls = await uploadMediaFilesToS3(imageFiles, userId, 'image', {pathPrefix:'1464/products'});
-        const videoUrls = await uploadMediaFilesToS3(videoFiles, userId, 'video', {pathPrefix:'1464/products '});
+        const imageUrls = await uploadMediaFilesToS3(imageFiles, userId, 'image', {pathPrefix:'products'});
+        const videoUrls = await uploadMediaFilesToS3(videoFiles, userId, 'video', {pathPrefix:'products '});
         // Combine images and videos into one media array
  
         
