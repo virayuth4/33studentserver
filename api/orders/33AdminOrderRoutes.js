@@ -9,8 +9,8 @@ require('dotenv').config();
 
 
 router.get('/1464/orders', authenticateFirebaseToken, async (req, res) => {
-    console.log('==========1464 orders route hit==========')
-    const userId = req.user.id
+    console.log('==========33 orders route hit==========')
+    const userId = req.user.uid
     const page = parseInt(req.query.page) || 1
     const limit = 5  // 5 orders per page
     const offset = (page - 1) * limit
@@ -21,7 +21,7 @@ router.get('/1464/orders', authenticateFirebaseToken, async (req, res) => {
         // First, get total count of orders
         const countQuery = `
             SELECT COUNT(DISTINCT o."orderId") 
-            FROM "1464_orders" o 
+            FROM "33orders" o 
             WHERE o."userId" = $1
         `
         const countResult = await zingoPool.query(countQuery, [userId])
@@ -63,7 +63,7 @@ router.get('/1464/orders', authenticateFirebaseToken, async (req, res) => {
         // Get the orderIds for this page
         const orderIdsQuery = `
             SELECT "orderId"
-            FROM "1464_orders"
+            FROM "33orders"
             WHERE "userId" = $1
             ORDER BY "createdAt" DESC
             LIMIT $2 OFFSET $3
@@ -111,9 +111,9 @@ router.get('/1464/orders', authenticateFirebaseToken, async (req, res) => {
                 p."productName",
                 p."productPrice",
                 p."productImagePaths"
-            FROM "1464_orders" o
-            LEFT JOIN "1464_order_items" oi ON o."orderId" = oi."orderId"
-            LEFT JOIN "1464_products" p ON oi."productId" = p."id"
+            FROM "33orders" o
+            LEFT JOIN "33orderItems" oi ON o."orderId" = oi."orderId"
+            LEFT JOIN "33products" p ON oi."productId" = p."id"
             WHERE o."userId" = $1 AND o."orderId" IN (${placeholders})
             ORDER BY o."createdAt" DESC, oi."id";
         `
@@ -194,8 +194,8 @@ router.get('/1464/orders', authenticateFirebaseToken, async (req, res) => {
     }
 })
 
-router.get('/1464/order/:orderId', authenticateFirebaseToken, async (req, res) => {
-    console.log('==========1464 orderId route hit==========')
+router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => {
+    console.log('==========33 orderId route hit==========')
     const userId = req.user.id
     console.log("req query", req.query)
     console.log("req params", req.params)
@@ -236,9 +236,9 @@ router.get('/1464/order/:orderId', authenticateFirebaseToken, async (req, res) =
                 p."productPrice",
                 p."productImagePaths"
                
-            FROM "1464_orders" o
-            LEFT JOIN "1464_order_items" oi ON o."orderId" = oi."orderId"
-            LEFT JOIN "1464_products" p ON oi."productId" = p."id"
+            FROM "33orders" o
+            LEFT JOIN "33orderItems" oi ON o."orderId" = oi."orderId"
+            LEFT JOIN "33products" p ON oi."productId" = p."id"
             WHERE o."userId" = $1 AND o."orderId" = $2
             ORDER BY oi."id";
         `
@@ -519,16 +519,17 @@ router.post('/1464/orders/cancel/:orderId', authenticateFirebaseToken, async (re
 
 
 router.get("/1464/dashboard/orders/:status?", authenticateFirebaseToken, async (req, res) => {
-    console.log("==========1464 Dashboard Orders Route Hit==========");
-    const userId = req.user.id;
+    console.log("==========33 Orders Route Hit==========");
+    const userId = req.user.uid;
     const status = req.params.status;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     console.log("status", status)
+    console.log("userId", userId)
 
     const productIdQuery = `
-    SELECT id FROM "1464_products"
+    SELECT id FROM "33products"
     WHERE "postedBy" = $1
     `;
     const productIdResult = await zingoPool.query(productIdQuery, [userId]);
@@ -548,10 +549,12 @@ router.get("/1464/dashboard/orders/:status?", authenticateFirebaseToken, async (
             p."productBrand",
             o."shippingInfo",
             o."paymentMethod",
-            o."paymentStatus"
-        FROM "1464_order_items" oi
-        LEFT JOIN "1464_products" p ON oi."productId" = p.id
-        LEFT JOIN "1464_orders" o ON oi."orderId" = o."orderId"
+            o."paymentStatus",
+            o."deliveryMethod",
+            o."deliveryFee"
+        FROM "33orderItems" oi
+        LEFT JOIN "33products" p ON oi."productId" = p.id
+        LEFT JOIN "33orders" o ON oi."orderId" = o."orderId"
         WHERE oi."productId" IN (${productIds.join(',')})
         `;
 
@@ -572,6 +575,9 @@ router.get("/1464/dashboard/orders/:status?", authenticateFirebaseToken, async (
                     break;
                 case 'delivered':
                     orderItemsQuery += ` AND oi."currentStatus" = 'delivered'`;
+                    break;
+                case 'store-picked-up':
+                    orderItemsQuery += ` AND oi."currentStatus" = 'store-picked-up'`;
                     break;
                 case 'cancelled':
                     orderItemsQuery += ` AND oi."currentStatus" = 'cancelled'`;

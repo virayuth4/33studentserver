@@ -562,7 +562,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
         const uniqueSellerIds = [...new Set(Object.values(postedByMap))].filter(Boolean);
         for (const sellerId of uniqueSellerIds) {
           const sellerResult = await client.query(
-            `SELECT "telegramChatId", "name", "phone" FROM "33studentusers" WHERE "userId" = $1`,
+            `SELECT "telegramChatId", "name", "phone" FROM "33studentUsers" WHERE "userId" = $1`,
             [sellerId]
           );
           const seller = sellerResult.rows[0];

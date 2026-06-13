@@ -47,7 +47,7 @@ router.post("/user/google-login", async (req, res) => {
   }
     // 4. Upsert directly into PostgreSQL with the dynamically resolved school name!
     const upsertQuery = `
-      INSERT INTO "33studentusers" (userId, name, email, picture, school)
+      INSERT INTO "33studentUsers" (userId, name, email, picture, school)
       VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (userId) 
       DO UPDATE SET name = EXCLUDED.name, picture = EXCLUDED.picture

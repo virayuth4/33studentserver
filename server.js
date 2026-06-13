@@ -50,6 +50,7 @@ const studentUserRoutes = require('./api/user/33studentUserRoutes');
 const studentProductRoutes = require('./api/products/33productRoute');
 const studentCartRoutes = require('./api/cart/cartRoutes');
 const studentDealsRoutes = require('./api/deals/dealsRoutes');
+const studentAdminOrderRoutes = require('./api/orders/33AdminOrderRoutes');
 
 //====================Import Routes for Flutter====================
 const flutterUserRoutes = require('./api/flutter/user/flutterUserRoutes');
@@ -73,7 +74,6 @@ const userSessionsRoutes = require('./api/sessions/sessionsRoutes');
 const vintageFetchProductRoute = require('./api/vintage/vintageFetchProductRoute')
 const _1464EventTrackerRoutes = require ('./api/vintage/1464EventTrackerRoutes')
 const _1464CheckoutRoutes = require('./api/vintage/1464CheckoutRoutes')
-const _1464OrderRoutes = require('./api/vintage/1464OrderRoutes')
 const _1464AdminOrderRoutes = require('./api/vintage/1464AdminOrderRoutes')
 const _1464RefundRoutes = require('./api/vintage/1464RefundRoutes')
 
@@ -187,7 +187,6 @@ app.use('/api', userSessionsRoutes);
 app.use('/api', vintageFetchProductRoute) //this is also 1464
 app.use('/api', _1464EventTrackerRoutes)
 app.use('/api', _1464CheckoutRoutes)
-app.use('/api', _1464OrderRoutes)
 app.use('/api', _1464AdminOrderRoutes)
 app.use('/api', _1464RefundRoutes)
 
@@ -199,6 +198,7 @@ app.use('/api', studentUserRoutes)
 app.use('/api', studentProductRoutes)
 app.use('/api', studentCartRoutes)
 app.use('/api', studentDealsRoutes)
+app.use('/api', studentAdminOrderRoutes)
 
 app.use('/product', slugRoutes) //Slug route uses '/prducts' instead of '/api'
 

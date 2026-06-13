@@ -382,7 +382,7 @@ router.get('/1464/my-products', createRateLimiterMiddleware, async (req, res) =>
                 u."userId" as "userId"
              
          FROM "33products" p
-         LEFT JOIN "33studentusers" u ON p."postedBy" = u."userId"
+         LEFT JOIN "33studentUsers" u ON p."postedBy" = u."userId"
          WHERE p.slug = $1`,
         [fullSlug]
       );

@@ -8,8 +8,8 @@ const { generateOrderId } = require("../../utils/generateOrderId");
 const { calculateOrderStatus, OrderItemStatus } = require("../../utils/order/orderStatus");
 require('dotenv').config();
 
-router.post("/1464/orders/:action/:orderId/:productId", authenticateFirebaseToken, async(req, res) => {
-    console.log("====== 1464 Update Order Status ======");
+router.post("/33/orders/:action/:orderId/:productId", authenticateFirebaseToken, async(req, res) => {
+    console.log("====== 33 Update Order Status ======");
     const {action, orderId, productId} = req.params;
     const {sellerId} = req.body;
     const orderIdInt = parseInt(orderId, 10);
@@ -22,7 +22,7 @@ router.post("/1464/orders/:action/:orderId/:productId", authenticateFirebaseToke
 
         // 1. Update the specific order item
         const updateItemQuery = `
-      UPDATE "1464_order_items"
+      UPDATE "33orderItems"
         SET "statusHistories" = CASE
             WHEN "statusHistories" IS NULL THEN 
                 jsonb_build_array(
@@ -49,7 +49,7 @@ router.post("/1464/orders/:action/:orderId/:productId", authenticateFirebaseToke
         // 2. Get all items for this order
         const itemsQuery = `
             SELECT "currentStatus" 
-            FROM "1464_order_items" 
+            FROM "33orderItems" 
             WHERE "orderId" = $1
         `;
         const itemsResult = await zingoPool.query(itemsQuery, [orderIdInt]);
@@ -58,7 +58,7 @@ router.post("/1464/orders/:action/:orderId/:productId", authenticateFirebaseToke
         const newOrderStatus = calculateOrderStatus(itemsResult.rows);
         console.log("New Order Status:", newOrderStatus);
         const updateOrderQuery = `
-        UPDATE "1464_orders"
+        UPDATE "33orders"
             SET "statusHistories" = CASE
                 WHEN "statusHistories" IS NULL THEN 
                     jsonb_build_array(
@@ -84,9 +84,9 @@ router.post("/1464/orders/:action/:orderId/:productId", authenticateFirebaseToke
 
         //  Get Buy Information and FCMToken
         const getBuyerQuery = `
-        SELECT u."fcmToken", o."userId"
-        FROM orders o
-        JOIN users u on o."userId" = u."id"
+        SELECT  o."userId"
+        FROM "33orders" o
+        JOIN "33studentUsers" u on o."userId" = u."userId"
         WHERE o."orderId" = $1
         `
 
@@ -119,8 +119,8 @@ router.post("/1464/orders/:action/:orderId/:productId", authenticateFirebaseToke
 
 
 // ====== Update Payment Status ======
-router.post("/1464/orders/:orderId/payment-status", authenticateFirebaseToken, async (req, res) => {
-    console.log("====== 1464 Update Payment Status ======");
+router.post("/33/orders/:orderId/payment-status", authenticateFirebaseToken, async (req, res) => {
+    console.log("====== 33 Update Payment Status ======");
     const { orderId } = req.params;
     const { paymentStatus, note } = req.body;
 
@@ -140,7 +140,7 @@ router.post("/1464/orders/:orderId/payment-status", authenticateFirebaseToken, a
         await zingoPool.query('BEGIN');
 
         // 1. Check order exists
-        const orderCheckQuery = `SELECT "orderId" FROM "1464_orders" WHERE "orderId" = $1`;
+        const orderCheckQuery = `SELECT "orderId" FROM "33orders" WHERE "orderId" = $1`;
         const orderCheckResult = await zingoPool.query(orderCheckQuery, [orderId]);
 
         if (orderCheckResult.rows.length === 0) {
@@ -150,7 +150,7 @@ router.post("/1464/orders/:orderId/payment-status", authenticateFirebaseToken, a
 
         // 2. Update paymentStatus on the order
         const updatePaymentStatusQuery = `
-            UPDATE "1464_orders"
+            UPDATE "33orders"
             SET "paymentStatus" = $1
             WHERE "orderId" = $2
         `;
@@ -158,7 +158,7 @@ router.post("/1464/orders/:orderId/payment-status", authenticateFirebaseToken, a
 
         // 3. Insert into payment status history
         const insertHistoryQuery = `
-            INSERT INTO "1464_payment_status_history" ("orderId", "status", "note")
+            INSERT INTO "33ordersPaymentStatus" ("orderId", "status", "note")
             VALUES ($1, $2, $3)
         `;
         await zingoPool.query(insertHistoryQuery, [orderId, paymentStatus, note || null]);
