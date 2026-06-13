@@ -74,7 +74,8 @@ router.post('/33student/product/posting',
           directToSeller,
           paymentMethods, 
           gender,
-          sizingMeasurements
+          sizingMeasurements,
+          isStorePickUpOnly,
         } = req.body;
         
         const productDescription = sanitizeProductDescription(req.body.productDescription);
@@ -86,11 +87,12 @@ router.post('/33student/product/posting',
         let productStockStatus = "In Stock";
         let sellerName = "Admin"
      // 1. Fallback defaults
-let productPrice = 1; 
-let totalAvailableQuantity = 1; 
+        let productPrice = 1; 
+        let totalAvailableQuantity = 1; 
 
-let discountedPrice = null;
-let discountPercentage = null;
+        let discountedPrice = null;
+        let discountPercentage = null;
+ 
 
 // 2. Parse variants and calculate prices
 if (variants) {
@@ -135,6 +137,7 @@ if (variants) {
         console.log("productName", productName);
         console.log("variants", variants);
         console.log("sizing guide", sizingGuide);
+        console.log("isStorePickUpOnly", isStorePickUpOnly);
         
         // Access the files from multer
         const imageFiles = req.files['productImages'] || [];
@@ -160,9 +163,9 @@ if (variants) {
               "productImagePaths", "productMediaPaths", "sellerPhoneNumber", "sellerAddress", "sellerCity", 
               "bankAccountNumber","bankAccountName", "saleState","isReviewed", "isVerified",
               "isFeatured", "slug","postedBy",  "productBrand", "moneyBackGuarantee", "directToSeller", "isPrivate", "sellerName", "productVariants",
-              "paymentMethods", "countryOfOrigin", "productSizingGuide", "gender", "productSizingMeasurements"
+              "paymentMethods", "countryOfOrigin", "productSizingGuide", "gender", "productSizingMeasurements", "isStorePickUpOnly"
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
           RETURNING id
         `;
 
@@ -199,7 +202,8 @@ if (variants) {
           countryOfOrigin,
           sizingGuide,
           gender,
-          sizingMeasurements
+          sizingMeasurements,
+          isStorePickUpOnly
         ];
 
         const result = await zingoPool.query(query, values);

@@ -117,11 +117,11 @@ router.get('/33student/home-data', createRateLimiterMiddleware, async (req, res)
       const [featuredResult, newArrivalsResult, localBrandsResult, giftForHerResult] = await Promise.all([
       // Featured products (from your existing featured query)
       zingoPool.query(`
-        SELECT id, "productName", "productCategory", "phoneNumber", "productPrice", 
-          "availableQuantity", "productDescription", "productImagePaths", "saleState", 
-          "reviewState", "verifyState", "featureState", "slug", "postedBy", "isDeleted", "createdAt"
-        FROM products
-        WHERE "isDeleted" = false AND "featureState" = true
+        SELECT id, "productName", "productCategory",  "productPrice", 
+           "productDescription", "productImagePaths", "saleState", 
+         "isFeatured", "slug", "postedBy", "isDeleted", "createdAt", "isStorePickUpOnly"
+        FROM "33products"
+        WHERE "isDeleted" = false AND "isFeatured" = true
         ORDER BY id DESC
       `),
 
@@ -270,11 +270,30 @@ router.get('/1464/all-products', createRateLimiterMiddleware, async (req, res) =
   } 
 });
 
-router.get('/1464/my-products', createRateLimiterMiddleware, async (req, res) => {
-  console.log('=== 1464 my-products route hit ===');
+router.get('/33/products/pickup-info', async (req, res) => {
+  console.log("=== 33 pickup info route hit ===")
   try {
-    const userId = req.query.userId;
-    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const productIds = (req.query.productIds || '').split(',').map(Number).filter(Boolean);
+    if (!productIds.length) {
+      return res.status(400).json({ error: 'productIds array is required' });
+    }
+
+    const result = await zingoPool.query(
+      `SELECT id, "isStorePickUpOnly" FROM "33products" WHERE id = ANY($1::int[])`,
+      [productIds]
+    );
+
+    res.status(200).json({ products: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred', details: error.message });
+  }
+});
+
+router.get('/33/my-products', createRateLimiterMiddleware, authenticateFirebaseToken,async (req, res) => {
+  console.log('=== 33 my-products route hit ===');
+  try {
+    const userId = req.user?.uid || req.user?.user_id;
+    console.log('userId', userId)
 
     let page = parseInt(req.query.page);
     if (isNaN(page) || page < 1) page = 1;
@@ -286,7 +305,7 @@ router.get('/1464/my-products', createRateLimiterMiddleware, async (req, res) =>
 
     const result = await zingoPool.query(
       `SELECT *, COUNT(*) OVER() AS total_count
-       FROM "1464_products"
+       FROM "33products"
        WHERE "postedBy" = $1
        ORDER BY "createdAt" DESC
        LIMIT $2 OFFSET $3`,
