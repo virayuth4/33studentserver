@@ -7,13 +7,38 @@ const multer = require("multer");
 const router = express.Router();
 
 
+router.get("/stores/by-product", async (req, res) => {
+  console.log("========= Stores by product router hit =========")
+  try {
+    const { productId } = req.query; // ?productId=67
+    console.log("Received productId:", productId);
+
+    if (!productId) {
+      return res.status(400).json({ message: "productId query parameter is required" });
+    }
+
+    const query = `
+      SELECT sl.*
+      FROM "33storeLocations" sl
+      INNER JOIN "33productStoreLocations" psl ON sl."storeId" = psl."storeLocationId"
+      WHERE psl."productId" = $1
+        AND sl."isActive" = true
+    `;
+
+    const result = await zingoPool.query(query, [productId]);
+    res.status(200).json({ message: 'Success', stores: result.rows });
+  } catch (e) {
+    console.error("Error", e);
+    res.status(500).json({ message: "Error" });
+  }
+});
 
 router.get("/stores/all-stores", async (req,res) => {
     console.log("========= All stores router hit =========")
     try {
         const query = `
-            SELECT * FROM users
-            WHERE "role" = 'seller'
+            SELECT * FROM "33storeLocations"
+            WHERE "userId" = $1
         `
         const result = await zingoPool.query(query);
         res.status(200).json({ 

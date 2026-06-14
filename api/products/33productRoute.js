@@ -76,6 +76,7 @@ router.post('/33student/product/posting',
           gender,
           sizingMeasurements,
           isStorePickUpOnly,
+          storeLocationIds,
         } = req.body;
         
         const productDescription = sanitizeProductDescription(req.body.productDescription);
@@ -210,6 +211,24 @@ if (variants) {
         const productId = result.rows[0].id;
         console.log('Inserted product:', result.rows[0]);
 
+        // Insert store location associations
+      if (isStorePickUpOnly && storeLocationIds) {
+        const parsedStoreIds = typeof storeLocationIds === 'string' 
+          ? JSON.parse(storeLocationIds) 
+          : storeLocationIds;
+
+        if (parsedStoreIds.length > 0) {
+       const storeInsertQuery = `
+          INSERT INTO "33productStoreLocations" ("productId", "storeLocationId")
+          VALUES ${parsedStoreIds.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ')}
+        `;
+          const storeValues = parsedStoreIds.flatMap(storeId => [productId, storeId]);
+
+          await zingoPool.query(storeInsertQuery, storeValues);
+          console.log(`Inserted ${parsedStoreIds.length} store location(s) for product ${productId}`);
+        }
+      }
+
         // Return success with the S3 URLs
         return res.status(200).json({
           message: 'Product posted successfully',
@@ -300,7 +319,9 @@ router.post('/33products/product/editing/:productId',
           sizingGuide,
           variants,
           gender,
-          sizingMeasurements
+          sizingMeasurements,
+          isStorePickUpOnly,  
+          storeLocationIds,
         } = req.body;
       //   console.log("DeletedImagePaths", deletedImagePaths)
       //   console.log("DeteledVideoPaths", deletedMediaPaths)
@@ -432,33 +453,34 @@ if (variants && variants.length > 0) {
     
             // Create an object with only the updated fields
       const updatedFields = {
-  slug: slug,
-  productName: productName,
-  productCategory: productCategory,
-  productSubCategory: productSubCategory,
-  productTags: _productTags,
-  sellerCity: sellerCity,
-  productPrice: productPrice,
-  totalAvailableQuantity: availableQuantity,
-  productCondition: productCondition,
-  productStockStatus: productStockStatus,
-  productBrand: productBrand,
-  countryOfOrigin: countryOfOrigin,
-  productDescription: productDescription,
-  isPrivate: _isPrivate,
-  productImagePaths: JSON.stringify(updatedImagePaths),
-  productMediaPaths: JSON.stringify(updatedMediaPaths),
-  bankAccountNumber: bankAccountNumber,
-  bankAccountName: bankAccountName,
-  moneyBackGuarantee: _moneyBackGuarantee,
-  directToSeller: _directToSeller,
-  productVariants: JSON.stringify(processedVariants ?? variants),
-  productSizingGuide: sizingGuide,
-  gender: productGender,
-  productSizingMeasurements: sizingMeasurements,
-  discountedPrice: discountedPrice,
-  discountPercentage: discountPercentage,
-  updatedAt: 'NOW()',
+          slug: slug,
+          productName: productName,
+          productCategory: productCategory,
+          productSubCategory: productSubCategory,
+          productTags: _productTags,
+          sellerCity: sellerCity,
+          productPrice: productPrice,
+          totalAvailableQuantity: availableQuantity,
+          productCondition: productCondition,
+          productStockStatus: productStockStatus,
+          productBrand: productBrand,
+          countryOfOrigin: countryOfOrigin,
+          productDescription: productDescription,
+          isPrivate: _isPrivate,
+          productImagePaths: JSON.stringify(updatedImagePaths),
+          productMediaPaths: JSON.stringify(updatedMediaPaths),
+          bankAccountNumber: bankAccountNumber,
+          bankAccountName: bankAccountName,
+          moneyBackGuarantee: _moneyBackGuarantee,
+          directToSeller: _directToSeller,
+          productVariants: JSON.stringify(processedVariants ?? variants),
+          productSizingGuide: sizingGuide,
+          gender: productGender,
+          productSizingMeasurements: sizingMeasurements,
+          discountedPrice: discountedPrice,
+          discountPercentage: discountPercentage,
+          updatedAt: 'NOW()',
+          isStorePickUpOnly: isStorePickUpOnly === 'true',
 };
 
          // Build the update query dynamically
@@ -480,6 +502,36 @@ if (variants && variants.length > 0) {
          const result = await client.query(updateQuery, updateValues);
    
          await client.query('COMMIT');
+
+         // Sync store locations
+if (isStorePickUpOnly === 'true' && storeLocationIds) {
+  const parsedStoreIds = typeof storeLocationIds === 'string'
+    ? JSON.parse(storeLocationIds)
+    : storeLocationIds;
+
+      // Delete existing store locations for this product
+      await zingoPool.query(
+        `DELETE FROM "33productStoreLocations" WHERE "productId" = $1`,
+        [productId]
+      );
+
+      // Re-insert the updated ones
+      if (parsedStoreIds.length > 0) {
+        const storeInsertQuery = `
+          INSERT INTO "33productStoreLocations" ("productId", "storeLocationId")
+          VALUES ${parsedStoreIds.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ')}
+        `;
+        const storeValues = parsedStoreIds.flatMap(storeId => [productId, storeId]);
+        await zingoPool.query(storeInsertQuery, storeValues);
+        console.log(`Updated ${parsedStoreIds.length} store location(s) for product ${productId}`);
+      }
+    } else if (isStorePickUpOnly === 'false') {
+      // If store pickup was turned off, remove all store associations
+      await zingoPool.query(
+        `DELETE FROM "33productStoreLocations" WHERE "productId" = $1`,
+        [productId]
+      );
+    }
    
          res.status(200).json({
            message: 'Successfully updated product details',

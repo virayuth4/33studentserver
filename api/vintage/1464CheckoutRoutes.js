@@ -265,7 +265,7 @@ async function createOrderWithAvailabilityCheck(orderData, client) {
 const {
   products, shippingInfo, deliveryFee, paymentMethod,
   pointsUsed, pointsDiscount, userId, firstOrderDiscount,
-  discountCode, codeDiscount, deliveryMethod
+  discountCode, codeDiscount, deliveryMethod, storeLocationId
 } = orderData;
 
   // Validate discount code if provided
@@ -355,9 +355,9 @@ const {
       "orderId", "userId", "totalAmount", "originalTotalAmount",
       "pointsUsed", "shippingInfo", "statusHistories", "currentStatus",
       "discountCode", "codeDiscount", "paymentMethod", "paymentStatus", "deliveryFee",
-      "deliveryMethod", "createdAt", "updatedAt"
+      "deliveryMethod", "createdAt", "updatedAt", "storeLocationId"
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     RETURNING "orderId"
   `;
 
@@ -383,7 +383,8 @@ const {
   deliveryFee || 1.0,
   deliveryMethod || 'normal',
   new Date().toISOString(),
-  new Date().toISOString()
+  new Date().toISOString(),
+  storeLocationId || null
 ]);
 
   const orderId = orderResult.rows[0].orderId;
@@ -483,7 +484,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
 
       try {
        let orderDetails, shippingInfo, paymentMethod, deliveryMethod, pointsUsed, pointsDiscount,
-        firstOrderDiscount, discountCode, codeDiscount;
+        firstOrderDiscount, discountCode, codeDiscount, storeLocationId;;
 
         pointsUsed = 0;
         pointsDiscount = 0;
@@ -496,6 +497,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
       paymentMethod  = parsed.paymentMethod;
       deliveryMethod = parsed.deliveryMethod || 'normal';
       discountCode   = parsed.discountCode || null;
+      storeLocationId = parsed.storeLocationId || null; 
       codeDiscount   = parsed.codeDiscount || 0;
     } else {
       orderDetails   = req.body.orderDetails;
@@ -504,6 +506,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
       deliveryMethod = req.body.deliveryMethod || 'normal';
       discountCode   = req.body.discountCode || null;
       codeDiscount   = req.body.codeDiscount || 0;
+      storeLocationId = req.body.storeLocationId || null; 
     }
 
         if (!orderDetails || !orderDetails.products || !Array.isArray(orderDetails.products)) {
@@ -545,6 +548,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
         firstOrderDiscount: firstOrderDiscount || 0,
         discountCode: discountCode || null,
         codeDiscount: codeDiscount || 0,
+        storeLocationId: deliveryMethod === 'storePickup' ? storeLocationId : null,
       };
 
         const result = await createOrderWithAvailabilityCheck(orderData, client);

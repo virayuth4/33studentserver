@@ -390,21 +390,24 @@ router.get('/33/my-products', createRateLimiterMiddleware, authenticateFirebaseT
       let fullSlug = '/' + req.params[0];
       // console.log('Full slug:', fullSlug);
   
-      const result = await zingoPool.query(
-        `SELECT p.id, 
-                p."productName", p."productCategory", p."productSubCategory", p."sellerPhoneNumber", p."productCondition", p."productStockStatus", p."sellerCity",
-                p."productPrice", p."totalAvailableQuantity", p."productDescription", p."productImagePaths", p."productMediaPaths", p."productBrand",
-                p."productTags", p."productStockStatus", p."countryOfOrigin",
-                p."saleState", p."isReviewed", p."isVerified", p."isFeatured", p.slug, p."isSold", 
-                p."postedBy",  p."createdAt", p."discountedPrice", p."moneyBackGuarantee", p."productVariants", p."productSizingGuide", p.gender,
-                p."productSizingMeasurements",
-                u."userId" as "userId"
-             
-         FROM "33products" p
-         LEFT JOIN "33studentUsers" u ON p."postedBy" = u."userId"
-         WHERE p.slug = $1`,
-        [fullSlug]
-      );
+  const result = await zingoPool.query(
+  `SELECT p.id, 
+          p."productName", p."productCategory", p."productSubCategory", p."sellerPhoneNumber", p."productCondition", p."productStockStatus", p."sellerCity",
+          p."productPrice", p."totalAvailableQuantity", p."productDescription", p."productImagePaths", p."productMediaPaths", p."productBrand",
+          p."productTags", p."productStockStatus", p."countryOfOrigin",
+          p."saleState", p."isReviewed", p."isVerified", p."isFeatured", p.slug, p."isSold", 
+          p."postedBy", p."createdAt", p."discountedPrice", p."moneyBackGuarantee", p."productVariants", p."productSizingGuide", p.gender,
+          p."productSizingMeasurements", p."isStorePickUpOnly",
+          u."userId" as "userId",
+          COALESCE(JSON_AGG(sl_full.*) FILTER (WHERE sl_full."storeId" IS NOT NULL), '[]') as "storeLocations"
+   FROM "33products" p
+   LEFT JOIN "33studentUsers" u ON p."postedBy" = u."userId"
+   LEFT JOIN "33productStoreLocations" psl ON p.id = psl."productId"
+   LEFT JOIN "33storeLocations" sl_full ON psl."storeLocationId" = sl_full."storeId"
+   WHERE p.slug = $1
+   GROUP BY p.id, u."userId"`,
+  [fullSlug]
+);
 
       if (result.rows.length === 0) {
         return res.status(404).json({

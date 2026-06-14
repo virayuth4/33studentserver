@@ -221,6 +221,7 @@ router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => 
                 o."deliveryFee",
                 o."createdAt" as "orderCreatedAt",
                 o."updatedAt" as "orderUpdatedAt",
+                o."storeLocationId",
                 -- Order Items
                 oi."id" as "orderItemId",
                 oi."productId",
@@ -234,7 +235,8 @@ router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => 
                 p."id" as "productDbId",
                 p."productName",
                 p."productPrice",
-                p."productImagePaths"
+                p."productImagePaths",
+                p."productVariants"
                
             FROM "33orders" o
             LEFT JOIN "33orderItems" oi ON o."orderId" = oi."orderId"

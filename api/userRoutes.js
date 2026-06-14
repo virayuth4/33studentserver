@@ -141,31 +141,46 @@ router.get('/user/profile', authenticateFirebaseToken, async (req, res) => {
     try {
         const firebaseUid = req.user.uid;
 
-        const query = `
-        SELECT "33studentUsers".*,
-               COALESCE(
-                 json_agg(
-                   json_build_object(
-                     'id', addr.id,
-                     'studentUid', addr."studentId",
-                     'address', addr.address,
-                     'city', addr.city,
-                     'phoneNumber', addr."phoneNumber",
-                     'isDefault', addr."isDefault",
-                     'createdAt', addr."createdAt",
-                     'district', addr.district,
-                     'commune', addr.commune,
-                     'updatedAt', addr."updatedAt"
-                   )
-                 ) FILTER (WHERE addr.id IS NOT NULL),
-                 '[]'::json
-               ) AS addresses
-        FROM "33studentUsers"
-        LEFT JOIN "33studentUsersAddress" addr ON "33studentUsers"."userId" = addr."studentId"
-        WHERE "33studentUsers"."userId" = $1
-        GROUP BY "33studentUsers"."userId"
-        `;
-
+      const query = `
+            SELECT "33studentUsers".*,
+                    COALESCE(
+                    json_agg(
+                        json_build_object(
+                        'id', addr.id,
+                        'studentUid', addr."studentId",
+                        'address', addr.address,
+                        'city', addr.city,
+                        'phoneNumber', addr."phoneNumber",
+                        'isDefault', addr."isDefault",
+                        'createdAt', addr."createdAt",
+                        'district', addr.district,
+                        'commune', addr.commune,
+                        'updatedAt', addr."updatedAt"
+                        )
+                    ) FILTER (WHERE addr.id IS NOT NULL),
+                    '[]'::json
+                    ) AS addresses,
+                    COALESCE(
+                    json_agg(
+                        json_build_object(
+                        'storeId', sl."storeId",
+                        'locationName', sl."locationName",
+                        'address', sl."address",
+                        'city', sl."city",
+                        'phoneNumber', sl."phoneNumber",
+                        'openingHours', sl."openingHours",
+                        'bannerUrl', sl."bannerUrl",
+                        'isActive', sl."isActive"
+                        )
+                    ) FILTER (WHERE sl."storeId" IS NOT NULL),
+                    '[]'::json
+                    ) AS stores
+            FROM "33studentUsers"
+            LEFT JOIN "33studentUsersAddress" addr ON "33studentUsers"."userId" = addr."studentId"
+            LEFT JOIN "33storeLocations" sl ON "33studentUsers"."userId" = sl."userId"
+            WHERE "33studentUsers"."userId" = $1
+            GROUP BY "33studentUsers"."userId"
+            `;
         const result = await zingoPool.query(query, [firebaseUid]);
         
         if (result.rows.length === 0) {
