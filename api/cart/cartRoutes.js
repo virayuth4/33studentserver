@@ -41,13 +41,13 @@ router.post('/cart/add', authenticateFirebaseToken, async(req, res) => {
         }
 
         // Insert the item into 33cartItems
-        const result = await client.query(`
-            INSERT INTO "33cartItems" ("cartId", "productId", "purchasedQuantity", "selectedColor", "selectedSize")
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT ("cartId", "productId", "selectedColor", "selectedSize") DO UPDATE
-            SET "purchasedQuantity" = "33cartItems"."purchasedQuantity" + EXCLUDED."purchasedQuantity",
-                "updatedAt" = CURRENT_TIMESTAMP
-        `, [cartId, productId, purchasedQuantity, selectedColor || null, selectedSize || null]);
+const result = await client.query(`
+    INSERT INTO "33cartItems" ("cartId", "productId", "purchasedQuantity", "selectedColor", "selectedSize")
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT ("cartId", "productId", "selectedColor", "selectedSize") DO UPDATE
+    SET "purchasedQuantity" = "33cartItems"."purchasedQuantity" + EXCLUDED."purchasedQuantity",
+        "updatedAt" = CURRENT_TIMESTAMP
+`, [cartId, productId, purchasedQuantity, selectedColor || null, selectedSize || null]);
 
         console.log(`${logPrefix} Insert/Update result:`, result.rowCount);
 
@@ -130,32 +130,39 @@ router.get('/cart/get', authenticateFirebaseToken, async(req,res) => {
         client = await zingoPool.connect()
 
 
-        const cartItems = await client.query(
-            `
-            SELECT
-                c.id as "cartId",
-                ci.id as "id",
-                ci."selectedSize",
-                ci."selectedColor",
-                p.id as "productId",
-                p."productName",
-                p."productDescription",
-                p."productPrice",
-                p."discountedPrice",
-                p."isSold",
-           
-                ci."purchasedQuantity",
-                p."slug",
-                p."productImagePaths"[0] as "productImage"
+     const cartItems = await client.query(
+    `
+    SELECT
+        c.id as "cartId",
+        ci.id as "id",
+        ci."selectedSize",
+        ci."selectedColor",
+        p.id as "productId",
+        p."productName",
+        p."productDescription",
+        p."isSold",
+        ci."purchasedQuantity",
+        p."slug",
+        p."productImagePaths"[0] as "productImage",
+        (variant->>'productPrice')::numeric AS "productPrice",
+        (variant->>'discountedPrice')::numeric AS "discountedPrice",
+        (variant->>'discountPercentage')::numeric AS "discountPercentage"
 
-            FROM "33carts" c
-            JOIN "33cartItems" ci ON c.id = ci."cartId"
-            JOIN "33products" p ON ci."productId" = p.id
-            WHERE c."userId" = $1
-            ORDER BY ci."createdAt" DESC
-            `,
-            [userId]
-        )
+    FROM "33carts" c
+    JOIN "33cartItems" ci ON c.id = ci."cartId"
+    JOIN "33products" p ON ci."productId" = p.id
+    LEFT JOIN LATERAL (
+        SELECT value AS variant
+        FROM jsonb_array_elements(p."productVariants")
+        WHERE value->>'color' = ci."selectedColor"
+          AND value->>'size' = ci."selectedSize"
+        LIMIT 1
+    ) v ON true
+    WHERE c."userId" = $1
+    ORDER BY ci."createdAt" DESC
+    `,
+    [userId]
+)
        
 
         res.status(200).json({
