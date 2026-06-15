@@ -222,7 +222,7 @@ router.post('/orders/status/update', authenticateFirebaseToken, async (req, res)
   const { status, orderId, description } = req.body;
   console.log('updateOrderStatus', status, typeof(status));
 
-  if (!["accepted", "delivered", "ordered", "delivering", "cancelled", "preparingForDelivery"].includes(status)) {
+  if (!["accepted", "delivered", "ordered", "delivering", "cancelled", "preparingForDelivery","userConfirmedOrder", "userCanelOrder"].includes(status)) {
       return res.status(400).json({ error: "Update Order State can only be 'accepted', 'delivered', 'ordered', 'delivering', 'cancelled', 'preparingForDelivery'." });
   }
 
@@ -307,37 +307,6 @@ router.post('/orders/status/update', authenticateFirebaseToken, async (req, res)
 });
 
 
-router.post('/orders/status/update/delivered',  authenticateFirebaseToken, async(req, res) => {
-    console.log('/order/state/update/delivered route hit') 
-    console.log('req body', req.body)
-    const {orderId,updateOrderStatus} = req.body;
-    console.log('updateOrderStatus', updateOrderStatus, typeof(updateOrderStatus))
-    
-    if (!["delivered", "ordered", "delivering"].includes(updateOrderStatus)) {
-        return res.status(400).json({ error: "Update Order State can only be 'delivered', 'ordered', or 'delivering'." });
-    }
-  
-    
-    try {
-        console.log(req.body)
-        const updateStatusQuery = `
-            UPDATE orders
-            SET "currentStatus" = $1,
-                "deliveredTime" = NOW ()
-            WHERE "orderId" = $2
-        `;
-        const values = [updateOrderStatus, orderId]
-        const updateStatusResult = await zingoPool.query(updateStatusQuery, values)
-        
-        if (updateStatusResult.rowCount === 0) {
-            return res.status(404).json({error: "Unable to update order status" })
-        }
-        res.status(200).json({message: "Update status successfully"})
-    } catch (err) {
-        console.error(`Error with assigning driver`, err);
-        res.status(500).json({ message: 'Error with assigning driver' });
-    }
-})
 
 
 module.exports = router

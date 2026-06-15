@@ -8,107 +8,56 @@ const { generateOrderId } = require("../../utils/generateOrderId");
 const { calculateOrderStatus, OrderItemStatus } = require("../../utils/order/orderStatus");
 require('dotenv').config();
 
-router.post("/33/orders/:action/:orderId/:productId", authenticateFirebaseToken, async(req, res) => {
-    console.log("====== 33 Update Order Status ======");
-    const {action, orderId, productId} = req.params;
-    const {sellerId} = req.body;
-    const orderIdInt = parseInt(orderId, 10);
+router.post("/33/orders/:action/:orderId/:productId", authenticateFirebaseToken, async (req, res) => {
+    const { action, orderId, productId } = req.params;
     const productIdInt = parseInt(productId, 10);
-    const fees = 0.08;
-    console.log("action", action)
+    const userId = req.user.uid;
+
+    // Guard early
+    if (!orderId || isNaN(productIdInt)) {
+        return res.status(400).json({ error: "Invalid orderId or productId" });
+    }
 
     try {
         await zingoPool.query('BEGIN');
 
-        // 1. Update the specific order item
-        const updateItemQuery = `
-      UPDATE "33orderItems"
-        SET "statusHistories" = CASE
-            WHEN "statusHistories" IS NULL THEN 
-                jsonb_build_array(
-                    jsonb_build_object(
-                        'status', $1::text,
-                        'description', '',
-                        'timestamp', NOW()
-                    )
-                )
-            ELSE
-                "statusHistories" || jsonb_build_array(
-                    jsonb_build_object(
-                        'status', $1::text,
-                        'description', '',
-                        'timestamp', NOW()
-                    )
-                )
-            END,
-            "currentStatus" = $1
-        WHERE "orderId" = $2 AND "productId" = $3
-    `;
-        await zingoPool.query(updateItemQuery, [action, orderIdInt, productIdInt]);
+        // 1. Update item status
+        await zingoPool.query(
+            `UPDATE "33orderItems"
+             SET "currentStatus" = $1
+             WHERE "orderId" = $2 AND "productId" = $3`,
+            [action, orderId, productIdInt]
+        );
 
-        // 2. Get all items for this order
-        const itemsQuery = `
-            SELECT "currentStatus" 
-            FROM "33orderItems" 
-            WHERE "orderId" = $1
-        `;
-        const itemsResult = await zingoPool.query(itemsQuery, [orderIdInt]);
+        // 2. Log item-level history → new table
+        await zingoPool.query(
+            `INSERT INTO "33orderItemStatusHistories" ("orderId", "productId", "status", "changedById")
+             VALUES ($1, $2, $3, $4)`,
+            [orderId, productIdInt, action, userId]
+        );
 
-        // 3. Calculate and update order status
-        const newOrderStatus = calculateOrderStatus(itemsResult.rows);
-        console.log("New Order Status:", newOrderStatus);
-        const updateOrderQuery = `
-        UPDATE "33orders"
-            SET "statusHistories" = CASE
-                WHEN "statusHistories" IS NULL THEN 
-                    jsonb_build_array(
-                        jsonb_build_object(
-                            'status', $1::text,
-                            'description', '',
-                            'timestamp', NOW()
-                        )
-                    )
-                ELSE
-                    "statusHistories" || jsonb_build_array(
-                        jsonb_build_object(
-                            'status', $1::text,
-                            'description', '',
-                            'timestamp', NOW()
-                        )
-                    )
-                END,
-                "currentStatus" = $1
-            WHERE "orderId" = $2
-                `;
-        await zingoPool.query(updateOrderQuery, [newOrderStatus, orderIdInt]);
+        // 3. Recalculate order status
+        const { rows } = await zingoPool.query(
+            `SELECT "currentStatus" FROM "33orderItems" WHERE "orderId" = $1`,
+            [orderId]
+        );
+        const newOrderStatus = calculateOrderStatus(rows);
 
-        //  Get Buy Information and FCMToken
-        const getBuyerQuery = `
-        SELECT  o."userId"
-        FROM "33orders" o
-        JOIN "33studentUsers" u on o."userId" = u."userId"
-        WHERE o."orderId" = $1
-        `
+        // 4. Update order status
+        await zingoPool.query(
+            `UPDATE "33orders" SET "currentStatus" = $1 WHERE "orderId" = $2`,
+            [newOrderStatus, orderId]
+        );
 
-        const buyerResult = await zingoPool.query(getBuyerQuery, [orderIdInt]);
-        const buyerFCMToken = buyerResult.rows[0]?.fcmToken;
-
-        // Send notification to buyer
-        if (buyerFCMToken) {
-            await notificationService.sendOrderStatusNotification(
-                buyerFCMToken,
-                action,
-                orderIdInt,
-                productIdInt,
-                "order"
-            );
-        }
+        // 5. Log order-level history → original table (no productId)
+        await zingoPool.query(
+            `INSERT INTO "33orderStatusHistories" ("orderId", "status")
+             VALUES ($1, $2)`,
+            [orderId, newOrderStatus]
+        );
 
         await zingoPool.query('COMMIT');
-        res.status(200).json({ 
-            message: "Order status updated successfully",
-            orderStatus: newOrderStatus
-        });
+        res.status(200).json({ message: "Order status updated successfully", orderStatus: newOrderStatus });
 
     } catch (error) {
         await zingoPool.query('ROLLBACK');
@@ -116,8 +65,6 @@ router.post("/33/orders/:action/:orderId/:productId", authenticateFirebaseToken,
         res.status(500).json({ error: "Failed to update order status" });
     }
 });
-
-
 // ====== Update Payment Status ======
 router.post("/33/orders/:orderId/payment-status", authenticateFirebaseToken, async (req, res) => {
     console.log("====== 33 Update Payment Status ======");

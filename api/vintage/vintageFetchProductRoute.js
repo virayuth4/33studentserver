@@ -78,10 +78,10 @@ router.get('/1464/all-brands', createRateLimiterMiddleware, async (req, res) => 
 
 
 
-router.get('/1464/featured-products', async (req, res) => {
+router.get('/33/featured-products', async (req, res) => {
   try {
     const result = await zingoPool.query(`
-      SELECT * FROM "1464_products"
+      SELECT * FROM "33products"
       WHERE "isPrivate" = false
         AND "productBrand" IS NOT NULL
         AND "productBrand" != ''

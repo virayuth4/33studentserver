@@ -146,7 +146,9 @@ router.get('/cart/get', authenticateFirebaseToken, async(req,res) => {
         p."productImagePaths"[0] as "productImage",
         (variant->>'productPrice')::numeric AS "productPrice",
         (variant->>'discountedPrice')::numeric AS "discountedPrice",
-        (variant->>'discountPercentage')::numeric AS "discountPercentage"
+        (variant->>'discountPercentage')::numeric AS "discountPercentage",
+        p."productBrand",
+        p."isStorePickUpOnly"
 
     FROM "33carts" c
     JOIN "33cartItems" ci ON c.id = ci."cartId"

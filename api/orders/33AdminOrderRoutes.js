@@ -5,6 +5,7 @@ const multer = require('multer');
 const authenticateFirebaseToken = require("../../auth/authFirebaseToken")
 const axios = require('axios');
 const { generateOrderId } = require("../../utils/generateOrderId");
+const { ContentAndApprovalsListInstance } = require("twilio/lib/rest/content/v1/contentAndApprovals");
 require('dotenv').config();
 
 
@@ -236,11 +237,19 @@ router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => 
                 p."productName",
                 p."productPrice",
                 p."productImagePaths",
-                p."productVariants"
-               
+                p."productVariants",
+                -- Store
+                sl."storeId",
+                sl."locationName" as "storeName",
+                sl."address" as "storeAddress",
+                sl."city" as "storeCity",
+                sl."googleMapUrl" as "storeGoogleMapUrl",
+                sl."phoneNumber" as "storePhone"
+
             FROM "33orders" o
             LEFT JOIN "33orderItems" oi ON o."orderId" = oi."orderId"
             LEFT JOIN "33products" p ON oi."productId" = p."id"
+            LEFT JOIN "33storeLocations" sl ON o."storeLocationId" = sl."storeId"
             WHERE o."userId" = $1 AND o."orderId" = $2
             ORDER BY oi."id";
         `
@@ -282,8 +291,16 @@ router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => 
                 pointsUsed: firstRow.pointsUsed || 0,
                 shippingInfo: firstRow.shippingInfo || {}
             },
-            items: []
-        };
+            items: [],
+            storeLocation: firstRow.storeId ? {
+                    storeId: firstRow.storeId,
+                    name: firstRow.storeName,
+                    address: firstRow.storeAddress,
+                    city: firstRow.storeCity,
+                    googleMapUrl: firstRow.storeGoogleMapUrl,
+                    phone: firstRow.storePhone,
+                } : null,
+                        };
 
         // Add all order items with their individual status histories
         result.rows.forEach(row => {
@@ -632,5 +649,42 @@ router.post('/1464/order/refund/:orderId', authenticateFirebaseToken, async(req,
     console.log9("==========1464 Refund Order Route Hit =========="); 
     console.log9("req params", req.params);
 })
+
+router.post('/orders/status/update/delivered',  authenticateFirebaseToken, async(req, res) => {
+    console.log('/order/state/update/delivered route hit') 
+    console.log('req body', req.body)
+    const {orderId,updateOrderStatus} = req.body;
+    console.log('updateOrderStatus', updateOrderStatus, typeof(updateOrderStatus))
+    
+    if (!["delivered", "ordered", "delivering"].includes(updateOrderStatus)) {
+        return res.status(400).json({ error: "Update Order State can only be 'delivered', 'ordered', or 'delivering'." });
+    }
+  
+    
+    try {
+        console.log(req.body)
+        const updateStatusQuery = `
+            UPDATE orders
+            SET "currentStatus" = $1,
+                "deliveredTime" = NOW ()
+            WHERE "orderId" = $2
+        `;
+        const values = [updateOrderStatus, orderId]
+        const updateStatusResult = await zingoPool.query(updateStatusQuery, values)
+        
+        if (updateStatusResult.rowCount === 0) {
+            return res.status(404).json({error: "Unable to update order status" })
+        }
+        res.status(200).json({message: "Update status successfully"})
+    } catch (err) {
+        console.error(`Error with assigning driver`, err);
+        res.status(500).json({ message: 'Error with assigning driver' });
+    }
+})
+
+
+
+
+
 
 module.exports = router

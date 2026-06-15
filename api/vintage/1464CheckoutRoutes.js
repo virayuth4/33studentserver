@@ -7,7 +7,12 @@ const axios = require('axios');
 const { generateOrderId } = require("../../utils/generateOrderId");
 const { upload, uploadMediaFilesToS3 } = require("../../database/s3");
 const {getDeliveryFee} = require('./../../utils/constant/deliveryFee');
+const { sendOrderConfirmationEmail } = require("../../utils/sendOrderConfirmationEmai");
+const nodemailer = require("nodemailer");
 require('dotenv').config();
+
+console.log("SMTP_USER:", process.env.SMTP_USER);
+console.log("SMTP_PASS:", process.env.SMTP_PASSWORD ? "loaded" : "MISSING"); 
 
 // Remove the duplicate import line - it was causing an error
 // const {generateOrderId} = require() // <- This line was incomplete and duplicate
@@ -380,7 +385,7 @@ const {
   codeDiscount || 0,
   paymentMethod || "cod",
   'pending',
-  deliveryFee || 1.0,
+  deliveryFee ?? 1.0,
   deliveryMethod || 'normal',
   new Date().toISOString(),
   new Date().toISOString(),
@@ -416,7 +421,8 @@ const {
 
   await updateProductInventory(enrichedProducts, client);
 
-  return { orderId, enrichedProducts, message: 'Order created successfully' };
+  return { orderId, enrichedProducts, totalAmount, message: 'Order created successfully' };
+
 }
 
 // ---- Validate discount code ----
@@ -473,10 +479,11 @@ router.post("/33/order/create", authenticateFirebaseToken,
           details: err.message
         });
       }
+      const userId = req.user?.uid || req.user?.user_id;
 
       console.log("========== 33 Create Order Route Hit ==========");
       console.log("Req Body:", req.body);
-      console.log("User Info from token:", req.user.uid || req.user?.user_id);
+      console.log("User Info from token:", userId);
 
 
       const client = await zingoPool.connect();
@@ -561,6 +568,8 @@ router.post("/33/order/create", authenticateFirebaseToken,
           discountCode, codeDiscount,
         ];
 
+        await client.query("COMMIT");
+
         await sendTelegramOrderDetailsToId(adminTelegramId, ...notificationArgs);
 
         const uniqueSellerIds = [...new Set(Object.values(postedByMap))].filter(Boolean);
@@ -585,7 +594,43 @@ router.post("/33/order/create", authenticateFirebaseToken,
           await uploadMediaFilesToS3(req.file, req.user?.id, result.orderId, { pathPrefix: '33/receipts' });
         }
 
-        await client.query("COMMIT");
+        
+        let storeLocation = null;
+        if ((deliveryMethod === 'pickup' || deliveryMethod === 'storePickup') && storeLocationId) {
+          const storeResult = await client.query(
+            `SELECT * FROM "33storeLocations" WHERE "storeId" = $1`,
+            [storeLocationId]
+          );
+          storeLocation = storeResult.rows[0] ?? null;
+        }
+
+      if (userId) {
+          const userResult = await client.query(
+            `SELECT email FROM "33studentUsers" WHERE "userId" = $1`,
+            [userId]
+          );
+          const customerEmail = userResult.rows[0]?.email ?? null;
+
+          if (customerEmail) {
+            sendOrderConfirmationEmail({
+              toEmail: customerEmail,
+              orderId: result.orderId,
+              enrichedProducts: result.enrichedProducts,
+              shippingInfo,
+              deliveryFee,
+              totalAmount: result.totalAmount,
+              discountCode,
+              codeDiscount,
+              pointsDiscount,
+              firstOrderDiscount,
+              paymentMethod,
+              deliveryMethod,
+              storeLocation,
+            }).catch(err => console.error("Order confirmation email failed:", err));
+          } else {
+            console.log("No email found for userId:", userId);
+          }
+        }
 
         return res.status(200).json({
           success: true,
