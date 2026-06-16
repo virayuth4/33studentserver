@@ -8,25 +8,39 @@ const router = express.Router();
 
 
 router.get("/stores/by-product", async (req, res) => {
-  console.log("========= Stores by product router hit =========")
   try {
-    const { productId } = req.query; // ?productId=67
-    console.log("Received productId:", productId);
+    // Accept comma-separated: ?productIds=67,88,102
+    const { productIds } = req.query;
 
-    if (!productId) {
-      return res.status(400).json({ message: "productId query parameter is required" });
+    if (!productIds) {
+      return res.status(400).json({ message: "productIds query parameter is required" });
+    }
+
+    const ids = productIds.split(",").map(id => parseInt(id)).filter(Boolean);
+
+    if (!ids.length) {
+      return res.status(400).json({ message: "No valid product IDs provided" });
     }
 
     const query = `
-      SELECT sl.*
+      SELECT sl.*, psl."productId"
       FROM "33storeLocations" sl
       INNER JOIN "33productStoreLocations" psl ON sl."storeId" = psl."storeLocationId"
-      WHERE psl."productId" = $1
+      WHERE psl."productId" = ANY($1::int[])
         AND sl."isActive" = true
     `;
 
-    const result = await zingoPool.query(query, [productId]);
-    res.status(200).json({ message: 'Success', stores: result.rows });
+    const result = await zingoPool.query(query, [ids]);
+
+    // Group stores by productId: { 67: [...stores], 88: [...stores] }
+    const grouped = {};
+    for (const row of result.rows) {
+      const pid = row.productId;
+      if (!grouped[pid]) grouped[pid] = [];
+      grouped[pid].push(row);
+    }
+
+    res.status(200).json({ message: "Success", storesByProduct: grouped });
   } catch (e) {
     console.error("Error", e);
     res.status(500).json({ message: "Error" });

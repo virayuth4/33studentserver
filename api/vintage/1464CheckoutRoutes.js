@@ -270,7 +270,7 @@ async function createOrderWithAvailabilityCheck(orderData, client) {
 const {
   products, shippingInfo, deliveryFee, paymentMethod,
   pointsUsed, pointsDiscount, userId, firstOrderDiscount,
-  discountCode, codeDiscount, deliveryMethod, storeLocationId
+  discountCode, codeDiscount, deliveryMethod
 } = orderData;
 
   // Validate discount code if provided
@@ -360,9 +360,9 @@ const {
       "orderId", "userId", "totalAmount", "originalTotalAmount",
       "pointsUsed", "shippingInfo", "statusHistories", "currentStatus",
       "discountCode", "codeDiscount", "paymentMethod", "paymentStatus", "deliveryFee",
-      "deliveryMethod", "createdAt", "updatedAt", "storeLocationId"
+      "deliveryMethod", "createdAt", "updatedAt"
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING "orderId"
   `;
 
@@ -372,25 +372,24 @@ const {
     description: 'Order created'
   }];
 
-  const orderResult = await client.query(orderInsertQuery, [
-  customOrderId,
-  userId || null,
-  totalAmount,
-  subtotal,
-  pointsUsed,
-  JSON.stringify(shippingInfo),
-  JSON.stringify(initialStatus),
-  'ordered',
-  discountCode || null,
-  codeDiscount || 0,
-  paymentMethod || "cod",
-  'pending',
-  deliveryFee ?? 1.0,
-  deliveryMethod || 'normal',
-  new Date().toISOString(),
-  new Date().toISOString(),
-  storeLocationId || null
-]);
+    const orderResult = await client.query(orderInsertQuery, [
+      customOrderId,
+      userId || null,
+      totalAmount,
+      subtotal,
+      pointsUsed,
+      JSON.stringify(shippingInfo),
+      JSON.stringify(initialStatus),
+      'ordered',
+      discountCode || null,
+      codeDiscount || 0,
+      paymentMethod || "cod",
+      'pending',
+      deliveryFee ?? 1.0,
+      deliveryMethod || 'normal',
+      new Date().toISOString(),
+      new Date().toISOString()   
+    ]);
 
   const orderId = orderResult.rows[0].orderId;
 
@@ -399,9 +398,9 @@ const {
       INSERT INTO "33orderItems" (
         "orderId", "productId", "productName", "variant",
         "quantity", "effectivePrice", "originalPrice",
-        "createdAt", "updatedAt", "statusHistories", "currentStatus"
+        "createdAt", "updatedAt", "statusHistories", "currentStatus", "storeLocationId"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `;
 
     await client.query(itemInsertQuery, [
@@ -415,7 +414,8 @@ const {
       new Date().toISOString(),
       new Date().toISOString(),
       JSON.stringify(initialStatus),
-      'ordered'
+      'ordered',
+      product.storeLocationId ?? null
     ]);
   }
 
@@ -491,12 +491,13 @@ router.post("/33/order/create", authenticateFirebaseToken,
 
       try {
        let orderDetails, shippingInfo, paymentMethod, deliveryMethod, pointsUsed, pointsDiscount,
-        firstOrderDiscount, discountCode, codeDiscount, storeLocationId;;
+        firstOrderDiscount, discountCode, codeDiscount;
 
         pointsUsed = 0;
         pointsDiscount = 0;
         firstOrderDiscount = 0;
 
+    let storeLocationIds = {};
     if (req.body.orderData) {
       const parsed = JSON.parse(req.body.orderData);
       orderDetails   = parsed.orderDetails;
@@ -504,7 +505,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
       paymentMethod  = parsed.paymentMethod;
       deliveryMethod = parsed.deliveryMethod || 'normal';
       discountCode   = parsed.discountCode || null;
-      storeLocationId = parsed.storeLocationId || null; 
+      storeLocationIds = parsed.storeLocationIds || {}; 
       codeDiscount   = parsed.codeDiscount || 0;
     } else {
       orderDetails   = req.body.orderDetails;
@@ -513,7 +514,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
       deliveryMethod = req.body.deliveryMethod || 'normal';
       discountCode   = req.body.discountCode || null;
       codeDiscount   = req.body.codeDiscount || 0;
-      storeLocationId = req.body.storeLocationId || null; 
+      storeLocationIds = req.body.storeLocationIds || {}; 
     }
 
         if (!orderDetails || !orderDetails.products || !Array.isArray(orderDetails.products)) {
@@ -543,7 +544,12 @@ router.post("/33/order/create", authenticateFirebaseToken,
 
 
      const orderData = {
-        products: orderDetails.products,
+         products: orderDetails.products.map(product => ({
+        ...product,
+        storeLocationId: deliveryMethod === 'storePickup'
+          ? (storeLocationIds[String(product.id)] ?? null)  // 👈 String() ensures key match
+          : null,
+      })),
         shippingInfo,
         deliveryFee,
         deliveryMethod,
@@ -555,7 +561,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
         firstOrderDiscount: firstOrderDiscount || 0,
         discountCode: discountCode || null,
         codeDiscount: codeDiscount || 0,
-        storeLocationId: deliveryMethod === 'storePickup' ? storeLocationId : null,
+      
       };
 
         const result = await createOrderWithAvailabilityCheck(orderData, client);
@@ -595,14 +601,19 @@ router.post("/33/order/create", authenticateFirebaseToken,
         }
 
         
-        let storeLocation = null;
-        if ((deliveryMethod === 'pickup' || deliveryMethod === 'storePickup') && storeLocationId) {
+        let storeLocations = [];
+      if (deliveryMethod === 'storePickup') {
+        const uniqueStoreIds = [...new Set(
+          orderDetails.products.map(p => storeLocationIds[p.id]).filter(Boolean)
+        )];
+        if (uniqueStoreIds.length) {
           const storeResult = await client.query(
-            `SELECT * FROM "33storeLocations" WHERE "storeId" = $1`,
-            [storeLocationId]
+            `SELECT * FROM "33storeLocations" WHERE "storeId" = ANY($1)`,
+            [uniqueStoreIds]
           );
-          storeLocation = storeResult.rows[0] ?? null;
+          storeLocations = storeResult.rows;
         }
+      }
 
       if (userId) {
           const userResult = await client.query(
@@ -625,7 +636,7 @@ router.post("/33/order/create", authenticateFirebaseToken,
               firstOrderDiscount,
               paymentMethod,
               deliveryMethod,
-              storeLocation,
+              storeLocations,
             }).catch(err => console.error("Order confirmation email failed:", err));
           } else {
             console.log("No email found for userId:", userId);
