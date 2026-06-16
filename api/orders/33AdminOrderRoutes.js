@@ -200,15 +200,9 @@ router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => 
     const userId = req.user.uid
     console.log("req query", req.query)
     console.log("req params", req.params)
-    const page = parseInt(req.query.page) || 1
-    const limit = 5  // 5 orders per page
-    const offset = (page - 1) * limit
-    
-    // Fix: Get orderId from req.params, not req.query
     const orderId = req.params.orderId
 
     try {
-        // Modified query to get a specific order by orderId and userId
         const query = `
             SELECT 
                 o."orderId",
@@ -223,6 +217,7 @@ router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => 
                 o."createdAt" as "orderCreatedAt",
                 o."updatedAt" as "orderUpdatedAt",
                 o."storeLocationId",
+
                 -- Order Items
                 oi."id" as "orderItemId",
                 oi."productId",
@@ -231,100 +226,113 @@ router.get('/33/order/:orderId', authenticateFirebaseToken, async (req, res) => 
                 oi."currentStatus" as "itemCurrentStatus",
                 oi."statusHistories" as "itemStatusHistories",
                 oi."variant",
+                oi."storeLocationId" as "itemStoreLocationId",
                 oi."createdAt" as "itemCreatedAt",
+
                 -- Products
                 p."id" as "productDbId",
                 p."productName",
                 p."productPrice",
                 p."productImagePaths",
                 p."productVariants",
-                -- Store
+
+                -- Order-level store (joined on order's storeLocationId)
                 sl."storeId",
                 sl."locationName" as "storeName",
                 sl."address" as "storeAddress",
                 sl."city" as "storeCity",
                 sl."googleMapUrl" as "storeGoogleMapUrl",
-                sl."phoneNumber" as "storePhone"
+                sl."phoneNumber" as "storePhone",
+
+                -- Item-level store (joined on each item's storeLocationId)
+                sl2."storeId"       as "itemStoreId",
+                sl2."locationName"  as "itemStoreName",
+                sl2."address"       as "itemStoreAddress",
+                sl2."city"          as "itemStoreCity",
+                sl2."googleMapUrl"  as "itemStoreGoogleMapUrl",
+                sl2."phoneNumber"   as "itemStorePhone"
 
             FROM "33orders" o
             LEFT JOIN "33orderItems" oi ON o."orderId" = oi."orderId"
             LEFT JOIN "33products" p ON oi."productId" = p."id"
-            LEFT JOIN "33storeLocations" sl ON o."storeLocationId" = sl."storeId"
+            LEFT JOIN "33storeLocations" sl  ON o."storeLocationId"  = sl."storeId"
+            LEFT JOIN "33storeLocations" sl2 ON oi."storeLocationId" = sl2."storeId"
             WHERE o."userId" = $1 AND o."orderId" = $2
             ORDER BY oi."id";
         `
+
         const result = await zingoPool.query(query, [userId, orderId])
-    
+
         if (result.rows.length === 0) {
-            return res.status(404).json({
-                message: "Order not found"
-            });
+            return res.status(404).json({ message: "Order not found" });
         }
 
-        // Process the first row to get order details
         const firstRow = result.rows[0];
-        
-        // Get the current status from statusHistories
-        let currentStatus = 'ordered'; // default
+
+        // Derive current status from order-level statusHistories
+        let currentStatus = 'ordered';
         if (firstRow.statusHistories && Array.isArray(firstRow.statusHistories)) {
             const latestStatus = firstRow.statusHistories[firstRow.statusHistories.length - 1];
             currentStatus = latestStatus?.status || 'ordered';
         }
 
-        // Build the order object
         const order = {
             orderId: firstRow.orderId,
             userId: firstRow.userId,
             totalAmount: firstRow.totalAmount,
             deliveryFee: firstRow.deliveryFee,
-            currentStatus: currentStatus,
+            currentStatus,
             paymentMethod: firstRow.paymentMethod,
             paymentStatus: firstRow.paymentStatus,
             order: {
                 createdAt: firstRow.orderCreatedAt,
                 updatedAt: firstRow.orderUpdatedAt,
-                buyerAddress: firstRow.buyerAddress,
-                buyerCity: firstRow.buyerCity,
-                buyerPhoneNumber: firstRow.buyerPhoneNumber,
                 totalAmount: firstRow.totalAmount,
                 ordersStatusHistories: firstRow.statusHistories || [],
                 pointsUsed: firstRow.pointsUsed || 0,
-                shippingInfo: firstRow.shippingInfo || {}
+                shippingInfo: firstRow.shippingInfo || {},
             },
             items: [],
+            // Order-level store (for pickup orders where the whole order goes to one store)
             storeLocation: firstRow.storeId ? {
-                    storeId: firstRow.storeId,
-                    name: firstRow.storeName,
-                    address: firstRow.storeAddress,
-                    city: firstRow.storeCity,
-                    googleMapUrl: firstRow.storeGoogleMapUrl,
-                    phone: firstRow.storePhone,
-                } : null,
-                        };
+                storeId:      firstRow.storeId,
+                name:         firstRow.storeName,
+                address:      firstRow.storeAddress,
+                city:         firstRow.storeCity,
+                googleMapUrl: firstRow.storeGoogleMapUrl,
+                phone:        firstRow.storePhone,
+            } : null,
+        };
 
-        // Add all order items with their individual status histories
+        // Build items — each carries its own storeLocation if it has one
         result.rows.forEach(row => {
             if (row.orderItemId) {
-                const orderItem = {
-                    id: row.orderItemId,
-                    productId: row.productId,
-                    quantity: row.quantity,
-                    priceAtOrder: row.itemPrice,
-                    productName: row.productName,
-                    productPrice: row.productPrice,
+                order.items.push({
+                    id:                row.orderItemId,
+                    productId:         row.productId,
+                    quantity:          row.quantity,
+                    priceAtOrder:      row.itemPrice,
+                    productName:       row.productName,
+                    productPrice:      row.productPrice,
                     productImagePaths: row.productImagePaths,
-                    variant: row.variant,
-                    currentStatus: row.itemCurrentStatus || 'ordered', // Default to 'ordered' if not set
-                    statusHistories: row.itemStatusHistories || [], // Added item status histories
-                    createdAt: row.itemCreatedAt
-                };
-                
-                order.items.push(orderItem);
+                    variant:           row.variant,
+                    currentStatus:     row.itemCurrentStatus || 'ordered',
+                    statusHistories:   row.itemStatusHistories || [],
+                    createdAt:         row.itemCreatedAt,
+                    // Per-item store (may differ from order-level store)
+                    storeLocation: row.itemStoreId ? {
+                        storeId:      row.itemStoreId,
+                        name:         row.itemStoreName,
+                        address:      row.itemStoreAddress,
+                        city:         row.itemStoreCity,
+                        googleMapUrl: row.itemStoreGoogleMapUrl,
+                        phone:        row.itemStorePhone,
+                    } : null,
+                });
             }
         });
 
         console.log("Order details:", JSON.stringify(order, null, 2));
-
         res.status(200).json(order);
 
     } catch (error) {
