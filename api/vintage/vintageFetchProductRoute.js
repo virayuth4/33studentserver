@@ -17,18 +17,18 @@ const { GetRandomProducts } = require("../../algorithms/randomProduct");
 const KNOWN_COUNTRIES = ['cambodia', 'thailand', 'vietnam', 'japan', 'korea']
 
 
-router.get('/1464/brand/:brandName', createRateLimiterMiddleware, async (req, res) => {
+router.get('/33/brand/:brandName', createRateLimiterMiddleware, async (req, res) => {
   console.log("1464 brand route hit")
   try {
     const rawParam = req.params.brandName;
     // Convert "gian-saigon" → "gian saigon" for DB matching
     const searchPatternSpaced = rawParam.replace(/-/g, ' ');
     console.log("search pattern spaced", searchPatternSpaced)
-    const brandQuery = `SELECT * FROM "1464_brands" WHERE "brandName" ILIKE $1 LIMIT 1`;
+    const brandQuery = `SELECT * FROM "33brands" WHERE "brandName" ILIKE $1 LIMIT 1`;
     console.log("brand query", brandQuery)
     const brandResult = await zingoPool.query(brandQuery, [searchPatternSpaced]);
 
-    const productsQuery = `SELECT * FROM "1464_products" WHERE "productBrand" ILIKE $1`;
+    const productsQuery = `SELECT * FROM "33products" WHERE "productBrand" ILIKE $1`;
     const productsResult = await zingoPool.query(productsQuery, [searchPatternSpaced]);
 
     if (brandResult.rows.length === 0 && productsResult.rows.length === 0) {
