@@ -5,20 +5,20 @@ FROM node:18-alpine
 WORKDIR /usr/src/app
 
 # Install app dependencies
-# A wildcard is used to ensure both package.json AND package-lock.json are copied
+# Note: Ensure package-lock.json is generated locally and committed to Git!
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Define environment variable early (helps optimization tools and packages)
+ENV NODE_ENV=production
+
+# Install dependencies using the updated production flag
+RUN npm ci --omit=dev
 
 # Bundle app source
 COPY . .
 
-# Your app binds to port 3000 so you'll use the EXPOSE instruction to have it mapped by the docker daemon
+# Your app binds to port 9000
 EXPOSE 9000
-
-# Define environment variable
-ENV NODE_ENV production
 
 # Start the server
 CMD [ "node", "server.js" ]
