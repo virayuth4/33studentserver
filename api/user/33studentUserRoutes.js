@@ -16,6 +16,7 @@ const PARTNER_SCHOOLS = {
   "ciafirst.edu.kh": "CIA First (Alt)",
   "gmail.com": "Test Account (Gmail)" // For testing purposes only - remove in production!
 };
+
 router.post("/user/google-login", async (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ success: false, error: "Token is missing." });
@@ -47,12 +48,12 @@ router.post("/user/google-login", async (req, res) => {
   }
     // 4. Upsert directly into PostgreSQL with the dynamically resolved school name!
     const upsertQuery = `
-      INSERT INTO "33studentUsers" (userId, name, email, picture, school)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (userId) 
-      DO UPDATE SET name = EXCLUDED.name, picture = EXCLUDED.picture
-      RETURNING userId, name, email, picture, phone, address, school;
-    `;
+      INSERT INTO "33studentUsers" ("userId", name, email, picture, school)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT ("userId") 
+        DO UPDATE SET name = EXCLUDED.name, picture = EXCLUDED.picture
+        RETURNING "userId", name, email, picture, phone, address, school;
+      `;
 
     const values = [uid, name, email, picture, assignedSchoolName];
     const dbResult = await zingoPool.query(upsertQuery, values);
