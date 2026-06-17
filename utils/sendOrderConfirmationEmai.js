@@ -24,7 +24,6 @@ async function sendOrderConfirmationEmail({
   firstOrderDiscount,
   paymentMethod,
   deliveryMethod,
-  storeLocation,
 }) {
   const formatCurrency = (n) => Number(n || 0).toFixed(2);
 
@@ -37,6 +36,7 @@ async function sendOrderConfirmationEmail({
           <span style="color:#9CA3AF;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;margin-top:2px;display:inline-block;">
             ${[p.variant?.color ? `Color: ${p.variant.color}` : "", p.variant?.size ? `Size: ${p.variant.size}` : ""].filter(Boolean).join(" · ")}
           </span>
+          ${p.storeLocation ? `<br/><span style="color:#0F0F0F;font-size:12px;font-weight:600;">📍 ${p.storeLocation.locationName}</span>` : ""}
         </td>
         <td style="padding:14px 0;border-bottom:1px dashed #E5E7EB;text-align:center;color:#6B7280;font-size:14px;">×${p.purchasedQuantity}</td>
         <td style="padding:14px 0;border-bottom:1px dashed #E5E7EB;text-align:right;color:#6B7280;font-size:14px;">$${formatCurrency(p.price)}</td>
@@ -54,7 +54,7 @@ async function sendOrderConfirmationEmail({
   const paymentLabel =
     paymentMethod === "delivery" ? "Cash on Delivery" : paymentMethod ?? "N/A";
   const deliveryLabel =
-    deliveryMethod === "pickup"
+    deliveryMethod === "pickup" || deliveryMethod === "storePickup"
       ? "Store Pickup"
       : deliveryMethod === "grabExpress"
       ? "Grab Express"
@@ -68,6 +68,65 @@ async function sendOrderConfirmationEmail({
   ]
     .filter(Boolean)
     .join(", ");
+
+  // Single consistent "info row" used for pickup location(s), payment, and delivery —
+  // keeps everything in one column so it never breaks or goes lopsided across email clients.
+  const renderInfoRow = ({ icon, label, value, subtext, linkUrl, linkText, isLast }) => `
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:${isLast ? "0" : "10px"};">
+      <tr>
+        ${icon ? `
+        <td width="52" style="padding:16px 0 16px 16px;vertical-align:top;">
+          <table cellpadding="0" cellspacing="0" width="36" style="width:36px;">
+            <tr>
+              <td width="36" height="36" align="center" valign="middle" style="background:#0F0F0F;border-radius:8px;font-size:16px;line-height:36px;text-align:center;">${icon}</td>
+            </tr>
+          </table>
+        </td>
+        ` : ""}
+        <td style="padding:16px 16px 16px ${icon ? "4px" : "16px"};vertical-align:top;">
+          <p style="margin:0;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">${label}</p>
+          <p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#0F0F0F;">${value}</p>
+          ${subtext ? `<p style="margin:4px 0 0;font-size:13px;color:#6B7280;line-height:1.5;">${subtext}</p>` : ""}
+          ${linkUrl ? `<a href="${linkUrl}" style="display:inline-block;margin-top:8px;font-size:12px;color:#0F0F0F;font-weight:600;text-decoration:none;border-bottom:1px solid #0F0F0F;">${linkText}</a>` : ""}
+        </td>
+      </tr>
+    </table>
+  `;
+
+  const storeRows = enrichedProducts
+    .filter((p) => p.storeLocation)
+    .map((p) =>
+      renderInfoRow({
+        icon: "", 
+        label: `Pickup Location for ${p.productName}`,
+        value: p.storeLocation.locationName,
+        subtext: [
+          p.storeLocation.address,
+          p.storeLocation.phoneNumber,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        linkUrl: p.storeLocation.googleMapUrl,
+        linkText: "View on Maps →",
+      })
+    );
+
+  const paymentRow = renderInfoRow({
+    icon: "",
+    label: "Payment Method",
+    value: formatPaymentMethod(paymentLabel),
+  });
+
+  const deliveryRow = renderInfoRow({
+    icon: "",
+    label: "Delivery Method",
+    value: deliveryLabel,
+  });
+
+  const allRows = [...storeRows, paymentRow, deliveryRow];
+  const infoRowsHtml = allRows
+    .map((row, i) => (i === allRows.length - 1 ? row.replace("margin-bottom:10px;", "margin-bottom:0;") : row))
+    .join("");
 
   const html = `
     <!DOCTYPE html>
@@ -84,7 +143,6 @@ async function sendOrderConfirmationEmail({
           <td align="center">
             <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
-              <!-- Header -->
               <tr>
                 <td style="background:#0F0F0F;border-radius:16px 16px 0 0;padding:40px 40px 32px;">
                   <table width="100%" cellpadding="0" cellspacing="0">
@@ -103,7 +161,6 @@ async function sendOrderConfirmationEmail({
                 </td>
               </tr>
 
-              <!-- Greeting -->
               <tr>
                 <td style="background:#FFFFFF;padding:32px 40px 0;">
                   <p style="margin:0;font-size:15px;color:#374151;line-height:1.6;">
@@ -113,7 +170,6 @@ async function sendOrderConfirmationEmail({
                 </td>
               </tr>
 
-              <!-- Items -->
               <tr>
                 <td style="background:#FFFFFF;padding:24px 40px 0;">
                   <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">Items</p>
@@ -131,7 +187,6 @@ async function sendOrderConfirmationEmail({
                 </td>
               </tr>
 
-              <!-- Price Breakdown -->
               <tr>
                 <td style="background:#FFFFFF;padding:20px 40px 0;">
                   <table width="100%" cellpadding="0" cellspacing="0">
@@ -171,7 +226,6 @@ async function sendOrderConfirmationEmail({
                 </td>
               </tr>
 
-              <!-- Total -->
               <tr>
                 <td style="background:#FFFFFF;padding:16px 40px 32px;">
                   <table width="100%" cellpadding="0" cellspacing="0" style="border-top:2px solid #0F0F0F;padding-top:16px;">
@@ -183,40 +237,19 @@ async function sendOrderConfirmationEmail({
                 </td>
               </tr>
 
-              <!-- Divider -->
               <tr>
                 <td style="background:#FFFFFF;padding:0 40px;">
                   <div style="height:1px;background:#F3F4F6;"></div>
                 </td>
               </tr>
 
-              <!-- Info Cards -->
               <tr>
                 <td style="background:#FFFFFF;padding:28px 40px 32px;">
-                  <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td width="48%" style="vertical-align:top;background:#F9FAFB;border-radius:10px;padding:18px;border:1px solid #E5E7EB;">
-                        <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">Pickup Location</p>
-                        <p style="margin:0;font-size:14px;font-weight:600;color:#0F0F0F;">${storeLocation?.name ?? "Store"}</p>
-                        <p style="margin:4px 0 0;font-size:13px;color:#6B7280;line-height:1.5;">
-                          ${storeLocation?.address ?? ""}
-                          ${storeLocation?.phone ? `<br/>${storeLocation.phone}` : ""}
-                        </p>
-                        ${storeLocation?.googleMapUrl ? `<a href="${storeLocation.googleMapUrl}" style="display:inline-block;margin-top:10px;font-size:12px;color:#0F0F0F;font-weight:600;text-decoration:none;border-bottom:1px solid #0F0F0F;">View on Maps →</a>` : ""}
-                      </td>
-                      <td width="4%"></td>
-                      <td width="48%" style="vertical-align:top;background:#F9FAFB;border-radius:10px;padding:18px;border:1px solid #E5E7EB;">
-                        <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">Payment</p>
-                        <p style="margin:0;font-size:14px;font-weight:600;color:#0F0F0F;">${formatPaymentMethod(paymentLabel)}</p>
-                        <p style="margin:8px 0 0;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">Delivery</p>
-                        <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#0F0F0F;">${deliveryLabel}</p>
-                      </td>
-                    </tr>
-                  </table>
+                  <p style="margin:0 0 12px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">Order Details</p>
+                  ${infoRowsHtml}
                 </td>
               </tr>
 
-              <!-- Footer -->
               <tr>
                 <td style="background:#0F0F0F;border-radius:0 0 16px 16px;padding:24px 40px;">
                   <table width="100%" cellpadding="0" cellspacing="0">

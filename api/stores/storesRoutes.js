@@ -133,10 +133,10 @@ router.post('/stores/add-store',
         const query = `
           INSERT INTO "33storeLocations" (
             "locationName", "address", "city", "googleMapUrl",
-            "phoneNumber", "openingHours", "bannerUrl", "isActive"
+            "phoneNumber", "openingHours", "bannerUrl", "isActive", "userId"
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          RETURNING id
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING "storeId"
         `;
 
         const values = [
@@ -148,10 +148,11 @@ router.post('/stores/add-store',
           openingHours?.trim() || null,
           bannerUrl,
           true,
+          userId
         ];
 
         const result = await zingoPool.query(query, values);
-        const storeLocationId = result.rows[0].id;
+        const storeLocationId = result.rows[0].storeId;
         console.log('Inserted store location:', result.rows[0]);
 
         return res.status(200).json({

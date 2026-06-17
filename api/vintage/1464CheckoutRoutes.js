@@ -602,7 +602,8 @@ router.post("/33/order/create", authenticateFirebaseToken,
 
         
         let storeLocations = [];
-      if (deliveryMethod === 'storePickup') {
+        const storeLocationsById = {};
+          if (deliveryMethod === 'storePickup') {
         const uniqueStoreIds = [...new Set(
           orderDetails.products.map(p => storeLocationIds[p.id]).filter(Boolean)
         )];
@@ -612,9 +613,9 @@ router.post("/33/order/create", authenticateFirebaseToken,
             [uniqueStoreIds]
           );
           storeLocations = storeResult.rows;
+          storeLocations.forEach(s => { storeLocationsById[String(s.storeId)] = s; });
         }
       }
-
       if (userId) {
           const userResult = await client.query(
             `SELECT email FROM "33studentUsers" WHERE "userId" = $1`,
@@ -622,25 +623,40 @@ router.post("/33/order/create", authenticateFirebaseToken,
           );
           const customerEmail = userResult.rows[0]?.email ?? null;
 
-          if (customerEmail) {
-            sendOrderConfirmationEmail({
-              toEmail: customerEmail,
-              orderId: result.orderId,
-              enrichedProducts: result.enrichedProducts,
-              shippingInfo,
-              deliveryFee,
-              totalAmount: result.totalAmount,
-              discountCode,
-              codeDiscount,
-              pointsDiscount,
-              firstOrderDiscount,
-              paymentMethod,
-              deliveryMethod,
-              storeLocations,
-            }).catch(err => console.error("Order confirmation email failed:", err));
-          } else {
-            console.log("No email found for userId:", userId);
-          }
+          const enrichedProductsWithStore = result.enrichedProducts.map(p => ({
+          ...p,
+          storeLocation: p.storeLocationId
+            ? (storeLocationsById[String(p.storeLocationId)] ?? null)
+            : null,
+        }));
+
+    if (userId) {
+      const userResult = await client.query(
+        `SELECT email FROM "33studentUsers" WHERE "userId" = $1`,
+        [userId]
+      );
+    const customerEmail = userResult.rows[0]?.email ?? null;
+
+      if (customerEmail) {
+        sendOrderConfirmationEmail({
+          toEmail: customerEmail,
+          orderId: result.orderId,
+          enrichedProducts: enrichedProductsWithStore, 
+          shippingInfo,
+          deliveryFee,
+          totalAmount: result.totalAmount,
+          discountCode,
+          codeDiscount,
+          pointsDiscount,
+          firstOrderDiscount,
+          paymentMethod,
+          deliveryMethod,
+          // storeLocations no longer needed — drop it, each product now carries its own store
+        }).catch(err => console.error("Order confirmation email failed:", err));
+      } else {
+        console.log("No email found for userId:", userId);
+      }
+    }
         }
 
         return res.status(200).json({

@@ -173,7 +173,7 @@ router.get('/33student/home-data', createRateLimiterMiddleware, async (req, res)
   }
 });
 
-router.get('/1464/all-products', createRateLimiterMiddleware, async (req, res) => {
+router.get('/33/all-products', createRateLimiterMiddleware, async (req, res) => {
   console.log('=== 1464 all-products route hit ===');
   try {
     let page = parseInt(req.query.page);
@@ -238,7 +238,7 @@ router.get('/1464/all-products', createRateLimiterMiddleware, async (req, res) =
 
     const productsQuery = `
       SELECT *, COUNT(*) OVER() AS total_count
-      FROM "1464_products"
+      FROM "33products"
       WHERE ${whereClause}
       ORDER BY "createdAt" DESC
       LIMIT $1 OFFSET $2
