@@ -27,7 +27,7 @@ const loadEnvironmentVariables = () => {
     const defaultOrigins = [
         'https://goldfish-app-gu3zc.ondigitalocean.app',
         'https://lobster-app-4scgy.ondigitalocean.app',
-        'https://zingoclient-cndio.ondigitalocean.app/',
+        'https://zingoclient-cndio.ondigitalocean.app',
         'http://localhost:3000',
         'http://localhost:3001',
         'http://localhost:9000',
@@ -39,8 +39,8 @@ const loadEnvironmentVariables = () => {
         'http://192.168.18.6:3000',
         "products-sale-bucket.s3.ap-southeast-1.amazonaws.com",
         "https://king-prawn-app-rrla3.ondigitalocean.app",
-        "https://33student.vercel.app/",
-        "https://33student-virayuth-lims-projects.vercel.app/"
+        "https://33student.vercel.app",
+        "https://33student-virayuth-lims-projects.vercel.app"
         
     ];
 
