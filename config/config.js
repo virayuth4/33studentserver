@@ -38,11 +38,9 @@ const loadEnvironmentVariables = () => {
         "https://www.nerokart.com",
         'http://192.168.18.6:3000',
         "products-sale-bucket.s3.ap-southeast-1.amazonaws.com",
-      
-        "https://www.1464.store",
         "https://king-prawn-app-rrla3.ondigitalocean.app",
-
-        "https://33student.vercel.app/"
+        "https://33student.vercel.app/",
+        "https://33student-virayuth-lims-projects.vercel.app/"
         
     ];
 
