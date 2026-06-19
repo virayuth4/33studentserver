@@ -14,8 +14,11 @@ const PARTNER_SCHOOLS = {
   "nisc.edu.kh": "Northbridge",
   "ligeracademy.org": "Liger Academy",
   "ciafirst.edu.kh": "CIA First (Alt)",
-  "gmail.com": "Test Account (Gmail)" // For testing purposes only - remove in production!
 };
+
+const ALLOWED_TESTER_EMAILS = [
+  "virayuthlim2000@gmail.com" 
+];
 
 router.post("/user/google-login", async (req, res) => {
   const { token } = req.body;
@@ -25,35 +28,47 @@ router.post("/user/google-login", async (req, res) => {
     const decodedToken = await auth.verifyIdToken(token);
     const { uid, email, name, picture } = decodedToken;
 
-    // 2. Extract domain
-    const emailDomain = email.split("@")[1]?.toLowerCase();
+    const emailLower = email.toLowerCase();
+    const emailDomain = emailLower.split("@")[1];
 
-    // 3. Dynamic Check: Is this domain in our partner network dictionary?
-    const assignedSchoolName = PARTNER_SCHOOLS[emailDomain];
+    let assignedSchoolName = null;
 
-  if (!assignedSchoolName) {
-    console.warn(`🛑 Blocked login from unsupported domain: ${email}`);
-    
-    try {
-      await auth.deleteUser(uid);
-      console.log(`🗑️ Deleted unauthorized Firebase user: ${email}`);
-    } catch (deleteErr) {
-      console.error(`Failed to delete user ${uid}:`, deleteErr.message);
+    // 3. Step 1: Check if the user is a whitelisted tester
+    if (ALLOWED_TESTER_EMAILS.includes(emailLower)) {
+      assignedSchoolName = "Beta Tester Account"; // Or whatever label you want in your DB
+    } else {
+      // Step 2: Fall back to checking school domains if they aren't an explicit tester
+      assignedSchoolName = PARTNER_SCHOOLS[emailDomain];
     }
 
-    return res.status(403).json({ 
-      success: false, 
-      error: "Access Denied: Your school is not part of our campus retail partner network yet." 
-    });
-  }
-    // 4. Upsert directly into PostgreSQL with the dynamically resolved school name!
+    // 4. Block unauthorized users safely before touching the database
+    if (!assignedSchoolName) {
+      console.warn(`🛑 Blocked login from unsupported domain/email: ${email}`);
+      
+      try {
+        await auth.deleteUser(uid);
+        console.log(`🗑️ Deleted unauthorized Firebase user: ${email}`);
+      } catch (deleteErr) {
+        console.error(`Failed to delete user ${uid}:`, deleteErr.message);
+      }
+
+      return res.status(403).json({ 
+        success: false, 
+        error: "Access Denied: Your school is not part of our campus retail partner network yet." 
+      });
+    }
+
+    // 5. Upsert directly into PostgreSQL matching on EMAIL conflict
     const upsertQuery = `
       INSERT INTO "33studentUsers" ("userId", name, email, picture, school)
         VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT ("userId") 
-        DO UPDATE SET name = EXCLUDED.name, picture = EXCLUDED.picture
+        ON CONFLICT (email) 
+        DO UPDATE SET 
+          name = EXCLUDED.name, 
+          picture = EXCLUDED.picture,
+          school = EXCLUDED.school
         RETURNING "userId", name, email, picture, phone, address, school;
-      `;
+    `;
 
     const values = [uid, name, email, picture, assignedSchoolName];
     const dbResult = await zingoPool.query(upsertQuery, values);

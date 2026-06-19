@@ -174,7 +174,7 @@ router.get('/33student/home-data', createRateLimiterMiddleware, async (req, res)
 });
 
 router.get('/33/all-products', createRateLimiterMiddleware, async (req, res) => {
-  console.log('=== 1464 all-products route hit ===');
+  console.log('=== 33 all-products unified route hit ===');
   try {
     let page = parseInt(req.query.page);
     if (isNaN(page) || page < 1) page = 1;
@@ -183,16 +183,10 @@ router.get('/33/all-products', createRateLimiterMiddleware, async (req, res) => 
     if (isNaN(itemsPerPage) || itemsPerPage < 1 || itemsPerPage > 50) itemsPerPage = 12;
 
     const offset = (page - 1) * itemsPerPage;
-    const includeLifestyle = req.query.includeLifestyle !== 'false';
-    const onlyLifestyle = req.query.onlyLifestyle === 'true';
+    const includeLifestyle = req.query.includeLifestyle === 'true';
 
-    const filterType = req.query.filterType || null;
-    const filterValue = req.query.filterValue || null;
-    const subFilter = req.query.subFilter === 'all' ? null : (req.query.subFilter || null);
-
-    console.log('filterType', filterType);
-    console.log('filterValue', filterValue);
-    console.log('subFilter', subFilter);
+    // 1. Destructure all unified params from query string 
+    const { gender, category, search } = req.query;
 
     const conditions = [
       `"isPrivate" = false`,
@@ -200,37 +194,43 @@ router.get('/33/all-products', createRateLimiterMiddleware, async (req, res) => 
       `"productBrand" != ''`,
     ];
 
-    if (onlyLifestyle) {
-      conditions.push(`"productCategory" = 'lifestyle'`);
-    } else if (!includeLifestyle) {
+    if (!includeLifestyle) {
       conditions.push(`"productCategory" != 'lifestyle'`);
     }
 
     const queryParams = [itemsPerPage, offset];
 
+    // Helper to safely append positional SQL parameters
     const pushCondition = (column, value) => {
       queryParams.push(value);
       conditions.push(`"${column}" = $${queryParams.length}`);
     };
 
-    if (filterType && filterValue && filterValue !== 'all') {
-      switch (filterType) {
-        case 'gender':
-          pushCondition('gender', filterValue);
-          if (subFilter) pushCondition('productSubCategory', subFilter);
-          break;
-        case 'country':
-          pushCondition('countryOfOrigin', filterValue);
-          break;
-        case 'category':
-          pushCondition('productCategory', filterValue);
-          if (subFilter) pushCondition('productSubCategory', subFilter);
-          break;
-        case 'subcategory':
-          pushCondition('productSubCategory', filterValue);
-          break;
-        default:
-          break;
+    // 2. Handle Global Search input across Name, Brand, and Main Categories
+    if (search && search.trim() !== '') {
+      queryParams.push(`%${search.trim()}%`);
+      const searchPlaceholder = `$${queryParams.length}`;
+      conditions.push(`(
+        "productName" ILIKE ${searchPlaceholder} OR 
+        "productBrand" ILIKE ${searchPlaceholder} OR 
+        "productCategory" ILIKE ${searchPlaceholder} OR
+        "productDescription" ILIKE ${searchPlaceholder} OR
+        "productSubCategory" ILIKE ${searchPlaceholder}
+      )`);
+    }
+
+    // 3. Handle Gender-specific routing query
+    if (gender && gender !== 'all') {
+      pushCondition('gender', gender);
+    }
+
+    // 4. Handle Category / Subcategory strings dynamically
+    if (category && category !== 'all') {
+      // If it falls under clothes or accessory types, drill down or match overall tier
+      if (['pants', 'shirt', 'tshirt', 'bags', 'hats', 'socks'].includes(category.toLowerCase())) {
+        pushCondition('productSubCategory', category);
+      } else {
+        pushCondition('productCategory', category);
       }
     }
 
@@ -243,8 +243,7 @@ router.get('/33/all-products', createRateLimiterMiddleware, async (req, res) => 
       ORDER BY "createdAt" DESC
       LIMIT $1 OFFSET $2
     `;
-    console.log('Products query:', productsQuery);
-
+    
     const result = await zingoPool.query(productsQuery, queryParams);
     const rows = result.rows;
 
@@ -256,20 +255,13 @@ router.get('/33/all-products', createRateLimiterMiddleware, async (req, res) => 
 
     res.status(200).json({
       products: cleanProducts,
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalProducts: totalCount,
-        itemsPerPage,
-        hasMore,
-      },
+      pagination: { currentPage: page, totalPages, totalProducts: totalCount, itemsPerPage, hasMore },
     });
   } catch (error) {
     console.error('Error fetching products', error);
     res.status(500).json({ error: 'An error occurred', details: error.message });
   } 
 });
-
 router.get('/33/products/pickup-info', async (req, res) => {
   console.log("=== 33 pickup info route hit ===")
   try {

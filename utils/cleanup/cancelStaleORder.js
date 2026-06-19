@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const zingoPool = require('../../database/pgZingo');
+const { calculateOrderStatus } = require("../../utils/order/orderStatus");
 
 const SYSTEM_USER_ID = 'system-auto-cancel';
 
