@@ -17,7 +17,7 @@
     "@aws-sdk/client-ses": "^3.696.0",
     "@aws-sdk/lib-storage": "^3.802.0",
     "@aws-sdk/s3-request-presigner": "^3.685.0",
-    "axios": "^1.7.7",
+    "axios": "^1.18.1",
     "bcrypt": "^5.1.1",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
