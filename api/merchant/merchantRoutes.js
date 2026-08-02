@@ -6,6 +6,55 @@ const router = express.Router();
 const authenticateFirebaseToken = require('../../auth/authFirebaseToken');
 const { normalizePhoneNumber } = require("../../lib/normalizePhoneNumber");
 
+const { randomUUID } = require('crypto');
+
+router.post('/merchant/create', authenticateFirebaseToken, async (req, res) => {
+  console.log("merchant creation request body:", req.body);
+  const { name, contact_phone } = req.body;
+
+
+  if (!name || !contact_phone) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const ownerId = req.user?.id;
+  if (!ownerId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+  try {
+   const result = await zingoPool.query(
+      `INSERT INTO rielpoint_merchants
+        (name, slug, contact_phone, timezone, status, settings, owner_id, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
+      RETURNING id, name, slug, contact_email, contact_phone, timezone, status, settings, created_at, updated_at, owner_id`,
+      [
+        name.trim(),
+        slug,
+        contact_phone.trim(),
+        'Asia/Phnom_Penh',
+        'pending',
+        {},
+        ownerId,
+      ]
+    );
+
+    return res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') { // unique_violation, likely on slug
+      return res.status(409).json({ error: 'A merchant with this name already exists' });
+    }
+    console.error('Error creating merchant:', err);
+    return res.status(500).json({ error: 'Failed to create merchant' });
+  }
+});
+
 router.get('/dashboard', authenticateFirebaseToken, async (req, res) => {
   try {
     const userId = req.user.id; // set by authenticateFirebaseToken

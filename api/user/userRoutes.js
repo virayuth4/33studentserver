@@ -3,7 +3,8 @@ const zingoPool = require("../../database/pgZingo");
 const { admin, auth } = require('../../auth/firebase-admin');
 const axios = require("axios");
 const router = express.Router();
-const authenticateFirebaseToken = require('../../auth/authFirebaseToken')
+const authenticateFirebaseToken = require('../../auth/authFirebaseToken');
+const { normalizePhoneNumber } = require("../../lib/normalizePhoneNumber");
 
 
 async function sendOTPWithServiceAPI(phoneNumber, otp, fullName, requestNumber=1) {
@@ -267,7 +268,7 @@ router.post('/create-user-profile', async (req, res) => {
       INSERT INTO rielpoint_users (email, role, fullname, phone_number, rielpoints, username)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *`;
-    const insertUserValues = [email, 'customer', fullName, phoneNumber, points, username];
+    const insertUserValues = [email, 'customer', fullName, normalizePhoneNumber(phoneNumber), points, username];
 
     const insertResult = await zingoPool.query(insertUserQuery, insertUserValues);
 

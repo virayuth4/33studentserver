@@ -12,6 +12,7 @@ const ALLOWED_RATES = [10, 25, 50];
 
 
 router.get('/points/transactions', authenticateFirebaseToken, async (req, res) => {
+    console.log('Fetching transactions for user:', req.user.id);
     const userId = req.user.id;
 
     try {
