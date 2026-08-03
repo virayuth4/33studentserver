@@ -74,14 +74,15 @@ router.get('/dashboard', authenticateFirebaseToken, async (req, res) => {
     // 2. Pull all staff for that merchant
     const staffResult = await zingoPool.query(
       `SELECT
+         s.id,
          s.staff_id,
-         s.user_id,
          s.is_active,
          s.created_at,
+         s."is_deleted",
          u.fullname,
          u.phone_number
        FROM rielpoint_staffs s
-       JOIN rielpoint_users u ON u.id = s.user_id
+       JOIN rielpoint_users u ON u.id = s.staff_id
        WHERE s.merchant_id = $1`,
       [merchant.id]
     );
@@ -97,7 +98,7 @@ router.get('/dashboard', authenticateFirebaseToken, async (req, res) => {
       [merchant.id]
     );
 
-    console.log("Point Transaction Result:", pointTransactionResult.rows);
+    // console.log("Point Transaction Result:", pointTransactionResult.rows);
     res.json({
       merchant,
       staffs: staffResult.rows,
@@ -107,6 +108,150 @@ router.get('/dashboard', authenticateFirebaseToken, async (req, res) => {
   } catch (err) {
     console.error('Error fetching merchant dashboard:', err);
     res.status(500).json({ error: 'Failed to load dashboard' });
+  }
+});
+
+router.post('/staff/status/:rowId', authenticateFirebaseToken, async (req, res) => {
+  const { rowId } = req.params;
+  const { is_active } = req.body;
+  const userId = req.user?.id;
+
+  if (typeof is_active !== 'boolean') {
+    return res.status(400).json({ error: 'is_active must be a boolean.' });
+  }
+
+  try {
+    const merchantResult = await zingoPool.query(
+      `SELECT rielpoint_merchants.id
+       FROM rielpoint_merchants
+       JOIN rielpoint_users ON rielpoint_users.id = rielpoint_merchants.owner_id
+       WHERE rielpoint_merchants.owner_id = $1
+         AND rielpoint_users.role = 'owner'`,
+      [userId]
+    );
+
+    if (merchantResult.rows.length === 0) {
+      return res.status(403).json({ error: 'You do not have permission to update staff.' });
+    }
+
+    const merchantId = merchantResult.rows[0].id;
+
+    const updateResult = await zingoPool.query(
+      `UPDATE rielpoint_staffs
+       SET is_active = $1
+       WHERE id = $2 AND merchant_id = $3
+       RETURNING id, merchant_id, staff_id, is_active`,
+      [is_active, rowId, merchantId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Staff record not found for this merchant.' });
+    }
+
+    return res.status(200).json({ staff: updateResult.rows[0] });
+  } catch (err) {
+    console.error('Update staff status error:', err);
+    return res.status(500).json({ error: 'Failed to update staff status.' });
+  }
+});
+router.post('/staff/add', authenticateFirebaseToken, async (req, res) => {
+  const { staff_phone } = req.body;
+  const userId = req.user?.id;
+
+  if (!staff_phone || !staff_phone.trim()) {
+    return res.status(400).json({ error: 'Phone number is required.' });
+  }
+
+  try {
+   const merchantResult = await zingoPool.query(
+      `SELECT rielpoint_merchants.id
+      FROM rielpoint_merchants
+      JOIN rielpoint_users ON rielpoint_users.id = rielpoint_merchants.owner_id
+      WHERE rielpoint_merchants.owner_id = $1
+        AND rielpoint_users.role = 'owner'`,
+      [userId]
+    );
+
+    if (merchantResult.rows.length === 0) {
+      return res.status(403).json({ error: 'You do not have permission to add staff.' });
+    }
+
+    const merchantId = merchantResult.rows[0].id;
+
+    const staffIdResult = await zingoPool.query(
+      `SELECT id, name FROM rielpoint_users WHERE phone_number = $1`,
+      [staff_phone.trim()]
+    );
+
+    if (staffIdResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No user found with that phone number.' });
+    }
+
+    const staffId = staffIdResult.rows[0].id;
+    const staffName = staffIdResult.rows[0].name;
+
+    const addStaffResult = await zingoPool.query(
+      `INSERT INTO rielpoint_staffs (merchant_id, staff_id, is_active, created_at)
+       VALUES ($1, $2, true, now())
+       RETURNING id, merchant_id, staff_id, is_active, created_at`,
+      [merchantId, staffId]
+    );
+
+    return res.status(201).json({
+      staff: {
+        ...addStaffResult.rows[0],
+        staff_name: staffName,
+      },
+    });
+  } catch (err) {
+    console.error('Add staff error:', err);
+    return res.status(500).json({ error: 'Failed to add staff.' });
+  }
+});
+
+router.post('/staff/remove/:rowId', authenticateFirebaseToken, async (req, res) => {
+  const { rowId } = req.params;
+  const userId = req.user?.id;
+  console.log("Remove staff", rowId, "by user", userId);
+
+  if (!rowId) {
+    return res.status(400).json({ error: 'rowId is required.' });
+  }
+
+  try {
+    // Verify the requester owns the merchant this staff belongs to
+    const merchantResult = await zingoPool.query(
+      `SELECT rielpoint_merchants.id
+       FROM rielpoint_merchants
+       JOIN rielpoint_users ON rielpoint_users.id = rielpoint_merchants.owner_id
+       WHERE rielpoint_merchants.owner_id = $1
+         AND rielpoint_users.role = 'owner'`,
+      [userId]
+    );
+
+    if (merchantResult.rows.length === 0) {
+      return res.status(403).json({ error: 'You do not have permission to remove staff.' });
+    }
+
+    const merchantId = merchantResult.rows[0].id;
+
+    // Soft-delete: only deactivate if the staff row actually belongs to this merchant
+    const removeStaffResult = await zingoPool.query(
+      `UPDATE rielpoint_staffs
+       SET is_deleted = true
+       WHERE id = $1 AND merchant_id = $2
+       RETURNING id, merchant_id, staff_id, is_deleted`,
+      [rowId, merchantId]
+    );
+
+    if (removeStaffResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Staff record not found for this merchant.' });
+    }
+
+    return res.status(200).json({ staff: removeStaffResult.rows[0] });
+  } catch (err) {
+    console.error('Remove staff error:', err);
+    return res.status(500).json({ error: 'Failed to remove staff.' });
   }
 });
 module.exports = router;
