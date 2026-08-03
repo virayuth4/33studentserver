@@ -94,7 +94,22 @@ router.get('/dashboard', authenticateFirebaseToken, async (req, res) => {
       [merchant.id]
     );
     // console.log('Coupons result:', couponsResult.rows);
-
+const couponClaimsResult = await zingoPool.query(
+  `SELECT 
+     rielpoint_coupon_claims.*,
+     customer.phone_number AS customer_phone,
+     staff.fullname AS staff_fullname
+   FROM rielpoint_coupon_claims
+   LEFT JOIN rielpoint_users AS customer 
+     ON customer.id = rielpoint_coupon_claims.customer_id
+   LEFT JOIN rielpoint_users AS staff 
+     ON staff.id = rielpoint_coupon_claims.redeemed_by
+   WHERE rielpoint_coupon_claims.merchant_id = $1
+     AND rielpoint_coupon_claims.redeemed_at IS NOT NULL
+   ORDER BY rielpoint_coupon_claims.redeemed_at DESC
+   LIMIT 10`,
+  [merchant.id]
+)
   const pointTransactionResult = await zingoPool.query(
   `SELECT
      t.*,
@@ -114,6 +129,7 @@ router.get('/dashboard', authenticateFirebaseToken, async (req, res) => {
       merchant,
       staffs: staffResult.rows,
       coupons: couponsResult.rows,
+      couponClaims: couponClaimsResult.rows,
       recentPointTransactions: pointTransactionResult.rows
     });
   } catch (err) {
