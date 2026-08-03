@@ -5,6 +5,8 @@ const axios = require("axios");
 const router = express.Router();
 const authenticateFirebaseToken = require('../../auth/authFirebaseToken');
 const { normalizePhoneNumber } = require("../../lib/normalizePhoneNumber");
+const jwt = require('jsonwebtoken'); 
+const RESET_TOKEN_SECRET = process.env.OTP_ENCRYPTION_KEY;
 
 
 async function sendOTPWithServiceAPI(phoneNumber, otp, fullName, requestNumber=1) {
@@ -150,7 +152,7 @@ router.post("/user/registration/initiate", async (req, res) => {
         const result = await client.query(query, values);
         console.log("Query Result:", result.rows[0]);
 
-        // await sendOTPWithServiceAPI(phoneNumber, otp, fullName);
+        await sendOTPWithServiceAPI(phoneNumber, otp, fullName);
 
         return res.json({ success: true, message: 'OTP sent successfully' });
 
@@ -243,6 +245,8 @@ router.post("/user/registration/otp/confirmation/:phoneNumber", async (req, res)
 });
 
 
+
+
 router.post('/create-user-profile', async (req, res) => {
   console.log('=====create user route hit=====');
   const { email, fullName } = req.body;
@@ -281,5 +285,131 @@ router.post('/create-user-profile', async (req, res) => {
     res.status(500).json({ error: 'Failed to process user profile' });
   }
 });
+
+
+router.post("/user/forgot-password/initiate", async (req, res) => {
+    console.log("==========Initiate Forgot Password ==========");
+    let { phoneNumber } = req.body; // no password here — nothing sensitive yet
+
+    if (phoneNumber.startsWith('0')) {
+        phoneNumber = phoneNumber.substring(1);
+    } else if (phoneNumber.startsWith('855')) {
+        phoneNumber = phoneNumber.substring(3);
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const query = `
+        INSERT INTO rielpoint_otp ("phone_number", "otp_code")
+        VALUES ($1, $2)
+        ON CONFLICT ("phone_number")
+        DO UPDATE SET
+            "otp_code" = EXCLUDED."otp_code",
+            "attempts" = 0,
+            "created_at" = CURRENT_TIMESTAMP,
+            "expires_at" = CURRENT_TIMESTAMP + INTERVAL '10 minutes'
+        RETURNING *;
+    `;
+
+    try {
+        const result = await zingoPool.query(query, [phoneNumber, otp]);
+        console.log("Query Result:", result.rows[0]);
+        await sendOTPWithServiceAPI(phoneNumber, otp);
+        return res.json({ success: true, message: 'OTP sent successfully' });
+    } catch (error) {
+        console.error("Error executing query:", error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post("/user/forgot-password/otp-confirmation", async (req, res) => {
+    console.log("=====Forgot Password OTP-Confirmation==========");
+    const { phoneNumber, otpCode, newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({ success: false, message: "Password must be at least 8 characters." });
+    }
+
+    let formattedPhoneNumber = phoneNumber;
+    if (formattedPhoneNumber.startsWith('0')) {
+        formattedPhoneNumber = formattedPhoneNumber.substring(1);
+    } else if (formattedPhoneNumber.startsWith('855')) {
+        formattedPhoneNumber = formattedPhoneNumber.substring(3);
+    }
+
+    try {
+        const getOtpQuery = `
+            SELECT "otp_code", attempts,
+                EXTRACT(EPOCH FROM ("expires_at" - NOW())) as seconds_remaining
+            FROM rielpoint_otp
+            WHERE "phone_number" = $1
+        `;
+        const otpResult = await zingoPool.query(getOtpQuery, [formattedPhoneNumber]);
+
+        if (otpResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "No OTP found for this phone number." });
+        }
+
+        const record = otpResult.rows[0];
+        const attempts = record.attempts || 0;
+
+        if (record.seconds_remaining <= 0) {
+            await zingoPool.query('DELETE FROM rielpoint_otp WHERE "phone_number" = $1', [formattedPhoneNumber]);
+            return res.status(400).json({ success: false, message: "OTP has expired. Please request a new one." });
+        }
+
+        const newAttempts = attempts + 1;
+        await zingoPool.query(
+            `UPDATE rielpoint_otp SET attempts = $1 WHERE "phone_number" = $2`,
+            [newAttempts, formattedPhoneNumber]
+        );
+
+        if (newAttempts > 3) {
+            await zingoPool.query('DELETE FROM rielpoint_otp WHERE "phone_number" = $1', [formattedPhoneNumber]);
+            return res.status(401).json({ success: false, message: "Too many attempts. Please request a new OTP." });
+        }
+
+        if (otpCode !== record.otp_code) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid OTP. You have ${3 - newAttempts} attempts remaining.`
+            });
+        }
+
+        // Verified — burn the OTP, then reset the password right away.
+        // newPassword only ever existed in this one request; it's never
+        // written to rielpoint_otp at all.
+        await zingoPool.query('DELETE FROM rielpoint_otp WHERE "phone_number" = $1', [formattedPhoneNumber]);
+
+        await resetFirebasePassword(formattedPhoneNumber, newPassword);
+
+        return res.status(200).json({ success: true, message: "Password reset successfully." });
+    } catch (error) {
+        console.error("Error executing query or resetting password:", error);
+        return res.status(500).json({ success: false, message: "Internal server error." });
+    }
+});
+ 
+const resetFirebasePassword = async (phoneNumber, newPassword) => {
+    let formattedPhone = phoneNumber;
+    if (phoneNumber.startsWith('0')) {
+        formattedPhone = '855' + phoneNumber.substring(1);
+    } else if (!phoneNumber.startsWith('855')) {
+        formattedPhone = '855' + phoneNumber;
+    }
+    const email = `${formattedPhone}@phone.com`;
+    console.log("Phone Email in Reset Firebase Password", email);
+ 
+    try {
+        const userRecord = await admin.auth().getUserByEmail(email);
+        await admin.auth().updateUser(userRecord.uid, { password: newPassword });
+        console.log(`Password updated successfully for user ${userRecord.uid}`);
+    } catch (error) {
+        console.error('Error resetting password:', error);
+        throw error;
+    }
+};
+
+
 
 module.exports = router;

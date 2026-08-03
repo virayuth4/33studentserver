@@ -62,6 +62,7 @@ router.get('/points/transactions', authenticateFirebaseToken, async (req, res) =
 
 router.post('/points/add', authenticateFirebaseToken, async (req, res) => {
     const { phone, amount, currency, rate, idempotencyKey } = req.body;
+    console.log("Staff Id", req.user.id, "is attempting to credit points:", { phone, amount, currency, rate, idempotencyKey });
 
     if (!idempotencyKey) {
         return res.status(400).json({ message: 'idempotencyKey is required.' });
@@ -96,10 +97,12 @@ router.post('/points/add', authenticateFirebaseToken, async (req, res) => {
 
         // ---- Resolve merchant_id (UUID) from rielpoint_staffs ----
         const staffLinks = await client.query(
-            `SELECT staff_id, merchant_id FROM rielpoint_staffs
-             WHERE user_id = $1 AND is_active = true`,
+            `SELECT id, merchant_id FROM rielpoint_staffs
+             WHERE staff_id = $1 AND is_active = true`,
             [req.user.id]
         );
+
+        console.log("Staff links found for user:", staffLinks.rows);
 
         if (staffLinks.rows.length === 0) {
             return res.status(403).json({ message: 'This phone number is not registered as active staff at any merchant.' });
@@ -109,7 +112,10 @@ router.post('/points/add', authenticateFirebaseToken, async (req, res) => {
         }
 
         const merchantId = staffLinks.rows[0].merchant_id;
-        const staffId = staffLinks.rows[0].staff_id;
+        const staffId = staffLinks.rows[0].id;
+        console.log("Staff Links", staffLinks.rows);
+      
+        console.log("staffId", staffId, "is linked to merchantId:", merchantId);
 
         // ---- Validation ----
        

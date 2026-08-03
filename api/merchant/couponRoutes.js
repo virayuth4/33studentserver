@@ -140,12 +140,12 @@ router.post('/coupons/:id/claim', authenticateFirebaseToken, async (req, res) =>
     const otp = generateOtp();
         const otpEncrypted = encryptOtp(otp);
 
-    const claimResult = await client.query(
+      const claimResult = await client.query(
       `INSERT INTO rielpoint_coupon_claims
-         (coupon_id, customer_id, merchant_id, otp_encrypted, otp_expires_at, claimed_at)
-       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '7 days', NOW())
-       ON CONFLICT (coupon_id, customer_id) DO NOTHING
-       RETURNING claim_id`,
+        (coupon_id, customer_id, merchant_id, otp_encrypted, otp_expires_at, claimed_at)
+      VALUES ($1, $2, $3, $4, NOW() + INTERVAL '7 days', NOW())
+      ON CONFLICT (coupon_id, customer_id) WHERE redeemed_at IS NULL DO NOTHING
+      RETURNING claim_id`,
       [id, userId, coupon.merchant_id, otpEncrypted]
     );
 

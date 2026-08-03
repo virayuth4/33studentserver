@@ -8,7 +8,9 @@ const { normalizePhoneNumber } = require("../../lib/normalizePhoneNumber");
 
 const { randomUUID } = require('crypto');
 
-router.post('/merchant/create', authenticateFirebaseToken, async (req, res) => {
+
+
+router.post('/merchant/create',  async (req, res) => {
   console.log("merchant creation request body:", req.body);
   const { name, contact_phone } = req.body;
 
@@ -93,10 +95,19 @@ router.get('/dashboard', authenticateFirebaseToken, async (req, res) => {
     );
     // console.log('Coupons result:', couponsResult.rows);
 
-    const pointTransactionResult = await zingoPool.query(
-      'SELECT * FROM rielpoint_point_transactions WHERE merchant_id = $1 ORDER BY created_at DESC LIMIT 10',
-      [merchant.id]
-    );
+  const pointTransactionResult = await zingoPool.query(
+  `SELECT
+     t.*,
+     s.staff_id AS staff_user_id,
+     u.fullname AS staff_fullname
+   FROM rielpoint_point_transactions t
+   LEFT JOIN rielpoint_staffs s ON s.id = t.staff_id
+   LEFT JOIN rielpoint_users u ON u.id = s.staff_id
+   WHERE t.merchant_id = $1
+   ORDER BY t.created_at DESC
+   LIMIT 10`,
+  [merchant.id]
+);
 
     // console.log("Point Transaction Result:", pointTransactionResult.rows);
     res.json({
